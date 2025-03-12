@@ -14,17 +14,17 @@ from telegram.ext import (
 from bs4 import BeautifulSoup
 from deep_translator import GoogleTranslator
 
-# الحصول على المفاتيح من البيئة
+# المتغيرات البيئية
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 CLOUDCONVERT_API_KEY = os.getenv('CLOUDCONVERT_API_KEY')
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        'مرحبًا! 👋\n'
-        'أرسل لي ملف PDF وسأقوم ب:\n'
-        '1. تحويله إلى HTML\n'
-        '2. ترجمة المحتوى إلى العربية\n'
-        '3. إرسال النسختين معًا'
+        'مرحبًا! 🚀\n'
+        'أرسل ملف PDF وسأقوم ب:\n'
+        '• تحويله إلى HTML\n'
+        '• ترجمة المحتوى للعربية\n'
+        '• إرسال النسختين معًا'
     )
 
 async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -56,16 +56,7 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             # إرسال النتائج
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-            await update.message.reply_document(
-                document=open(original_html_path, 'rb'),
-                filename=f'original_{timestamp}.html',
-                caption='النسخة الأصلية (الإنجليزية)'
-            )
-            await update.message.reply_document(
-                document=open(translated_html_path, 'rb'),
-                filename=f'translated_{timestamp}.html',
-                caption='النسخة المترجمة (العربية)'
-            )
+            await send_results(update, original_html_path, translated_html_path, timestamp)
 
     except Exception as e:
         print(f'Error: {e}')
@@ -126,27 +117,51 @@ async def convert_pdf_to_html(pdf_path: str, output_dir: str) -> str:
     return output_path
 
 async def translate_html(input_path: str, output_path: str):
-    """ترجمة محتوى HTML باستخدام deep_translator"""
+    """ترجمة محتوى HTML مع إصلاح التشوُّش العربي"""
     with open(input_path, 'r', encoding='utf-8') as f:
         html_content = f.read()
     
-    soup = BeautifulSoup(html_content, 'html.parser')
+    soup = BeautifulSoup(html_content, 'html5lib')
     translator = GoogleTranslator(source='en', target='ar')
     
-    # ترجمة جميع النصوص
+    # إعداد هيكل HTML للغة العربية
+    meta_tag = soup.new_tag('meta', charset='UTF-8')
+    soup.head.insert(0, meta_tag)
+    
+    if soup.html:
+        soup.html['dir'] = 'rtl'
+        soup.html['lang'] = 'ar'
+    
+    # ترجمة النصوص
     for element in soup.find_all(text=True):
         if element.parent.name in ['script', 'style', 'meta']:
             continue
         try:
-            translated = translator.translate(element.strip())
-            element.replace_with(translated)
+            cleaned_text = element.strip()
+            if cleaned_text:
+                translated = translator.translate(cleaned_text)
+                element.replace_with(translated)
         except Exception as e:
             print(f"Translation error: {e}")
             continue
     
-    # حفظ الملف المترجم
+    # الحفظ مع الترميز الصحيح
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(str(soup))
+
+async def send_results(update: Update, original_path: str, translated_path: str, timestamp: str):
+    """إرسال الملفات النهائية"""
+    await update.message.reply_document(
+        document=open(original_path, 'rb'),
+        filename=f'original_{timestamp}.html',
+        caption='النسخة الأصلية (الإنجليزية)'
+    )
+    
+    await update.message.reply_document(
+        document=open(translated_path, 'rb'),
+        filename=f'translated_{timestamp}.html',
+        caption='النسخة المترجمة (العربية)'
+    )
 
 if __name__ == '__main__':
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
