@@ -1,4 +1,5 @@
-python-telegram-bot>=20.0
-requests>=2.31.0
-beautifulsoup4>=4.12.0
-googletrans==4.0.0-rc1
+python-telegram-bot==20.5
+requests==2.31.0
+beautifulsoup4==4.12.3
+googletrans==3.0.0
+lxml==5.2.1  # مطلوب لـ BeautifulSoup
