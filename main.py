@@ -134,12 +134,17 @@ async def translate_html(input_path: str, output_path: str):
             line-height: 1.8;
             text-align: right;
             direction: rtl;
+            unicode-bidi: bidi-override;  # إصلاح اتجاه النص
+        }
+        p, h1, h2, h3, h4, h5, h6 {
+            margin: 10px 0;
+            padding: 0;
         }
     '''
     soup.head.append(style_tag)
     
     # ترجمة النصوص
-    for element in soup.find_all(text=True):
+    for element in soup.find_all(string=True):
         if element.parent.name in ['script', 'style', 'meta']:
             continue
         try:
@@ -176,4 +181,4 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('start', start))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_pdf))
     print('✅ البوت يعمل...')
-    app.run_polling()
+    app.run_polling(allowed_updates=Update.ALL_TYPES)  # إضافة allowed_updates
