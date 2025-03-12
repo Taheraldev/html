@@ -11,33 +11,38 @@ from telegram.ext import (
     filters,
     ContextTypes
 )
+from bs4 import BeautifulSoup
+from googletrans import Translator
 
 # الحصول على المفاتيح من البيئة
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 CLOUDCONVERT_API_KEY = os.getenv('CLOUDCONVERT_API_KEY')
 
+# تهيئة المترجم
+translator = Translator()
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('مرحبًا! أرسل لي ملف PDF لتحويله إلى HTML.')
+    await update.message.reply_text('مرحبًا! أرسل ملف PDF لتحويله إلى HTML مع ترجمة إلى العربية.')
 
 async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.document:
-        await update.message.reply_text('يرجى إرسال ملف PDF.')
+        await update.message.reply_text('❗ يرجى إرسال ملف PDF.')
         return
 
+    user = update.message.from_user
     document = update.message.document
     
     if document.mime_type != 'application/pdf':
-        await update.message.reply_text('الملف ليس بصيغة PDF!')
+        await update.message.reply_text('❌ الملف ليس بصيغة PDF!')
         return
 
     try:
         # تنزيل الملف المؤقت
         file = await document.get_file()
-        _, ext = os.path.splitext(document.file_name)
         
         with tempfile.TemporaryDirectory() as tmp_dir:
-            # حفظ الملف المؤقت
-            pdf_path = os.path.join(tmp_dir, f'input{ext}')
+            # حفظ الملف PDF مؤقتًا
+            pdf_path = os.path.join(tmp_dir, 'input.pdf')
             await file.download_to_drive(pdf_path)
             
             # إنشاء مهمة تحويل في CloudConvert
@@ -61,16 +66,15 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if 'data' not in job or 'tasks' not in job['data']:
                 raise Exception('فشل في إنشاء مهمة التحويل')
             
-            # الحصول على معلومات الرفع
+            # رفع الملف إلى CloudConvert
             upload_task = next(t for t in job['data']['tasks'] if t['name'] == 'import-1')
             upload_url = upload_task['result']['form']['url']
             upload_fields = upload_task['result']['form']['parameters']
             
-            # رفع الملف إلى CloudConvert
             with open(pdf_path, 'rb') as f:
-                requests.post(upload_url, data=upload_fields, files={'file': (document.file_name, f)})
+                requests.post(upload_url, data=upload_fields, files={'file': ('input.pdf', f)})
             
-            # الانتظار حتى اكتمال التحويل
+            # انتظار اكتمال التحويل
             export_task = next(t for t in job['data']['tasks'] if t['name'] == 'export-1')
             while True:
                 task_response = requests.get(
@@ -85,22 +89,56 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 elif task_data['status'] in ['error', 'cancelled']:
                     await update.message.reply_text('❌ فشل في عملية التحويل!')
                     return
-                await asyncio.sleep(2)
-            
-            # تنزيل وتجهيز الملف الناتج
+                await asyncio.sleep(3)
+
+            # تنزيل HTML الأصلي
             html_response = requests.get(html_url)
-            output_filename = f'converted_{datetime.now().strftime("%Y%m%d%H%M%S")}.html'
+            original_html_path = os.path.join(tmp_dir, 'original.html')
+            with open(original_html_path, 'wb') as f:
+                f.write(html_response.content)
             
-            # إرسال الملف الناتج
+            # ترجمة المحتوى
+            translated_html_path = os.path.join(tmp_dir, 'translated.html')
+            await translate_html_file(original_html_path, translated_html_path)
+            
+            # إرسال الملفين
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
             await update.message.reply_document(
-                document=html_response.content,
-                filename=output_filename,
-                caption='تم التحويل بنجاح! ✅'
+                document=open(original_html_path, 'rb'),
+                filename=f'original_{timestamp}.html',
+                caption='الملف الأصلي (الإنجليزية)'
             )
             
+            await update.message.reply_document(
+                document=open(translated_html_path, 'rb'),
+                filename=f'translated_{timestamp}.html',
+                caption='الملف المترجم (العربية)'
+            )
+
     except Exception as e:
         print(f'Error: {e}')
-        await update.message.reply_text('حدث خطأ أثناء المعالجة! ⚠️')
+        await update.message.reply_text('⚠️ حدث خطأ أثناء المعالجة!')
+
+async def translate_html_file(input_path: str, output_path: str):
+    """ترجمة محتوى HTML مع الحفاظ على الهيكل"""
+    with open(input_path, 'r', encoding='utf-8') as f:
+        html_content = f.read()
+    
+    soup = BeautifulSoup(html_content, 'html.parser')
+    
+    # ترجمة جميع النصوص القابلة للترجمة
+    for element in soup.find_all(text=True):
+        if element.parent.name in ['script', 'style', 'meta']:
+            continue
+        try:
+            translated = translator.translate(element, src='en', dest='ar').text
+            element.replace_with(translated)
+        except:
+            continue
+    
+    # حفظ النسخة المترجمة
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(str(soup))
 
 if __name__ == '__main__':
     # تهيئة البوت
@@ -111,5 +149,5 @@ if __name__ == '__main__':
     app.add_handler(MessageHandler(filters.Document.ALL, handle_pdf))
     
     # بدء البوت
-    print('Bot is running...')
+    print('✅ البوت يعمل...')
     app.run_polling()
