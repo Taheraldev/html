@@ -22,9 +22,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         'مرحبًا! 🚀\n'
         'أرسل ملف PDF وسأقوم ب:\n'
-        '• تحويله إلى HTML\n'
-        '• ترجمة المحتوى للعربية\n'
-        '• إرسال النسختين معًا'
+        '1. تحويله إلى HTML\n'
+        '2. ترجمة المحتوى للعربية\n'
+        '3. إرسال النسختين معًا'
     )
 
 async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -39,24 +39,17 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
-        # تنزيل الملف
         file = await document.get_file()
         
         with tempfile.TemporaryDirectory() as tmp_dir:
-            # حفظ الملف PDF مؤقتًا
             pdf_path = os.path.join(tmp_dir, 'input.pdf')
             await file.download_to_drive(pdf_path)
             
-            # تحويل PDF إلى HTML
             original_html_path = await convert_pdf_to_html(pdf_path, tmp_dir)
-            
-            # ترجمة HTML إلى العربية
             translated_html_path = os.path.join(tmp_dir, 'translated.html')
             await translate_html(original_html_path, translated_html_path)
             
-            # إرسال النتائج
-            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-            await send_results(update, original_html_path, translated_html_path, timestamp)
+            await send_results(update, original_html_path, translated_html_path)
 
     except Exception as e:
         print(f'Error: {e}')
@@ -117,20 +110,33 @@ async def convert_pdf_to_html(pdf_path: str, output_dir: str) -> str:
     return output_path
 
 async def translate_html(input_path: str, output_path: str):
-    """ترجمة محتوى HTML مع إصلاح التشوُّش العربي"""
+    """ترجمة المحتوى مع إصلاح التشويش العربي"""
     with open(input_path, 'r', encoding='utf-8') as f:
         html_content = f.read()
     
     soup = BeautifulSoup(html_content, 'html5lib')
     translator = GoogleTranslator(source='en', target='ar')
     
-    # إعداد هيكل HTML للغة العربية
-    meta_tag = soup.new_tag('meta', charset='UTF-8')
-    soup.head.insert(0, meta_tag)
+    # إعداد هيكل HTML عربي
+    if not soup.find('meta', {'charset': 'UTF-8'}):
+        meta_charset = soup.new_tag('meta', charset='UTF-8')
+        soup.head.insert(0, meta_charset)
     
     if soup.html:
         soup.html['dir'] = 'rtl'
         soup.html['lang'] = 'ar'
+    
+    # إضافة CSS للخطوط العربية
+    style_tag = soup.new_tag('style')
+    style_tag.string = '''
+        body {
+            font-family: 'Noto Sans Arabic', 'Arial', sans-serif;
+            line-height: 1.8;
+            text-align: right;
+            direction: rtl;
+        }
+    '''
+    soup.head.append(style_tag)
     
     # ترجمة النصوص
     for element in soup.find_all(text=True):
@@ -145,12 +151,14 @@ async def translate_html(input_path: str, output_path: str):
             print(f"Translation error: {e}")
             continue
     
-    # الحفظ مع الترميز الصحيح
-    with open(output_path, 'w', encoding='utf-8') as f:
+    # الحفظ النهائي
+    with open(output_path, 'w', encoding='utf-8', errors='xmlcharrefreplace') as f:
         f.write(str(soup))
 
-async def send_results(update: Update, original_path: str, translated_path: str, timestamp: str):
+async def send_results(update: Update, original_path: str, translated_path: str):
     """إرسال الملفات النهائية"""
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    
     await update.message.reply_document(
         document=open(original_path, 'rb'),
         filename=f'original_{timestamp}.html',
