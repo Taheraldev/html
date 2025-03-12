@@ -136,6 +136,6 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('htmlpdf', htmlpdf_command))  # الأمر الرئيسي
     app.add_handler(MessageHandler(filters.Document.MIME_TYPE_APPLICATION_PDF, handle_pdf))
     
-    # بدء التشغيل
+    
     print("Bot is running...")
     app.run_polling()
