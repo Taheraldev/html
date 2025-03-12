@@ -1,5 +1,4 @@
 python-telegram-bot==20.5
 requests==2.31.0
 beautifulsoup4==4.12.3
-googletrans==3.0.0
-lxml==5.2.1  # مطلوب لـ BeautifulSoup
+deepl==1.20.0
