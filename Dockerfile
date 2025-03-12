@@ -9,7 +9,6 @@ RUN apt-get update && apt-get install -y \
     libxslt1-dev \
     fonts-noto \
     fonts-arabeyes \
-    fonts-latex \
     && rm -rf /var/lib/apt/lists/*
 
 # نسخ الملفات
