@@ -11,37 +11,56 @@ from telegram.ext import (
     filters,
     ContextTypes
 )
-from bs4 import BeautifulSoup
-from googletrans import Translator
 
 # الحصول على المفاتيح من البيئة
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 CLOUDCONVERT_API_KEY = os.getenv('CLOUDCONVERT_API_KEY')
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('مرحبًا! أرسل لي ملف PDF لتحويله إلى HTML وترجمته.')
+async def htmlpdf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """الرسالة الترحيبية مع تعليمات الاستخدام"""
+    await update.message.reply_text(
+        'مرحبًا! أنا بوت تحويل PDF إلى HTML 📄\n'
+        'أرسل لي ملف PDF الآن (الحد الأقصى 5MB)'
+    )
+    context.user_data['allowed'] = True
 
 async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message.document:
-        await update.message.reply_text('يرجى إرسال ملف PDF.')
-        return
-
-    document = update.message.document
-    
-    if document.mime_type != 'application/pdf':
-        await update.message.reply_text('الملف ليس بصيغة PDF!')
-        return
-
+    """معالجة الملفات المرسلة"""
     try:
+        # التحقق من الإذن المسبق
+        if not context.user_data.get('allowed'):
+            await update.message.reply_text("⚠️ الرجاء استخدام الأمر /htmlpdf أولاً")
+            return
+        
+        # إزالة الإذن لمنع الاستخدام المتكرر
+        del context.user_data['allowed']
+
+        # التحقق من وجود الملف
+        document = update.message.document
+        if not document:
+            await update.message.reply_text("❌ لم يتم العثور على ملف")
+            return
+
+        # التحقق من نوع الملف
+        if document.mime_type != 'application/pdf':
+            await update.message.reply_text("❌ الملف ليس بصيغة PDF")
+            return
+
+        # التحقق من حجم الملف (5MB كحد أقصى)
+        if document.file_size > 5 * 1024 * 1024:
+            await update.message.reply_text("📦 حجم الملف يتجاوز 5MB!")
+            return
+
+        # إرسال رسالة الانتظار
+        processing_msg = await update.message.reply_text("⏳ جاري المعالجة...")
+
         # تنزيل الملف المؤقت
         file = await document.get_file()
-        _, ext = os.path.splitext(document.file_name)
-        
         with tempfile.TemporaryDirectory() as tmp_dir:
             # حفظ الملف المؤقت
-            pdf_path = os.path.join(tmp_dir, f'input{ext}')
+            pdf_path = os.path.join(tmp_dir, "input.pdf")
             await file.download_to_drive(pdf_path)
-            
+
             # إنشاء مهمة تحويل في CloudConvert
             job_data = {
                 "tasks": {
@@ -61,18 +80,17 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
             job = response.json()
             
             if 'data' not in job or 'tasks' not in job['data']:
-                raise Exception('فشل في إنشاء مهمة التحويل')
+                raise Exception("Failed to create conversion task")
             
-            # الحصول على معلومات الرفع
+            # رفع الملف إلى CloudConvert
             upload_task = next(t for t in job['data']['tasks'] if t['name'] == 'import-1')
             upload_url = upload_task['result']['form']['url']
             upload_fields = upload_task['result']['form']['parameters']
             
-            # رفع الملف إلى CloudConvert
             with open(pdf_path, 'rb') as f:
                 requests.post(upload_url, data=upload_fields, files={'file': (document.file_name, f)})
             
-            # الانتظار حتى اكتمال التحويل
+            # انتظار اكتمال التحويل
             export_task = next(t for t in job['data']['tasks'] if t['name'] == 'export-1')
             while True:
                 task_response = requests.get(
@@ -85,57 +103,39 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     html_url = task_data['result']['files'][0]['url']
                     break
                 elif task_data['status'] in ['error', 'cancelled']:
-                    await update.message.reply_text('❌ فشل في عملية التحويل!')
+                    await update.message.reply_text("❌ فشل في التحويل!")
                     return
                 await asyncio.sleep(2)
             
-            # تنزيل وتجهيز الملف الناتج
+            # تنزيل الملف الناتج
             html_response = requests.get(html_url)
-            original_html_content = html_response.content
-            output_filename = f'converted_{datetime.now().strftime("%Y%m%d%H%M%S")}.html'
-
-            # إرسال الملف الناتج الأصلي
-            await update.message.reply_document(
-                document=original_html_content,
-                filename=output_filename,
-                caption='تم التحويل بنجاح! ✅ (الملف الأصلي)'
+            output_filename = f"converted_{datetime.now().strftime('%Y%m%d%H%M%S')}.html"
+            
+            # حذف رسالة الانتظار
+            await context.bot.delete_message(
+                chat_id=update.effective_chat.id,
+                message_id=processing_msg.message_id
             )
             
-            # ترجمة الملف
-            soup = BeautifulSoup(original_html_content, 'html.parser')
-            translator = Translator()
-            
-            for text_element in soup.find_all(text=True):
-                if text_element.parent.name not in ['style', 'script', 'head', 'title', '[document]']:
-                    try:
-                        translated_text = translator.translate(text_element, src='en', dest='ar').text
-                        text_element.replace_with(translated_text)
-                    except Exception as translate_error:
-                        print(f'Translation error: {translate_error}')
-                        continue
-            
-            translated_html_content = str(soup).encode('utf-8')
-            translated_output_filename = f'translated_{output_filename}'
-            
-            # إرسال الملف المترجم
+            # إرسال الملف النهائي
             await update.message.reply_document(
-                document=translated_html_content,
-                filename=translated_output_filename,
-                caption='تمت الترجمة بنجاح! ✅'
+                document=html_response.content,
+                filename=output_filename,
+                caption="✅ تم التحويل بنجاح!\n قم باعادة توجية هذا ملف لبوت الرئيسي لكي يتمي تحويلة لpdf :@i2pdfbot \n@ta_ja199 لاسستفسار"
             )
             
     except Exception as e:
-        print(f'Error: {e}')
-        await update.message.reply_text('حدث خطأ أثناء المعالجة! ⚠️')
+        print(f"Error: {str(e)}")
+        await update.message.reply_text("⚠️ حدث خطأ غير متوقع!")
 
 if __name__ == '__main__':
     # تهيئة البوت
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     
-    # إضافة handlers
-    app.add_handler(CommandHandler('start', start))
-    app.add_handler(MessageHandler(filters.Document.ALL, handle_pdf))
+    # إضافة الأوامر
+    app.add_handler(CommandHandler('htmlpdf', htmlpdf_command))  # الأمر الرئيسي
+    app.add_handler(MessageHandler(filters.Document.MIME_TYPE_APPLICATION_PDF, handle_pdf))
     
-    # بدء البوت
-    print('Bot is running...')
+    # بدء التشغيل
+    print("Bot is running...")
     app.run_polling()
