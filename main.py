@@ -11,13 +11,15 @@ from telegram.ext import (
     filters,
     ContextTypes
 )
+from bs4 import BeautifulSoup
+from googletrans import Translator
 
 # الحصول على المفاتيح من البيئة
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 CLOUDCONVERT_API_KEY = os.getenv('CLOUDCONVERT_API_KEY')
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('مرحبًا! أرسل لي ملف PDF لتحويله إلى HTML.')
+    await update.message.reply_text('مرحبًا! أرسل لي ملف PDF لتحويله إلى HTML وترجمته.')
 
 async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.document:
@@ -25,7 +27,7 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     document = update.message.document
-
+    
     if document.mime_type != 'application/pdf':
         await update.message.reply_text('الملف ليس بصيغة PDF!')
         return
@@ -34,12 +36,12 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # تنزيل الملف المؤقت
         file = await document.get_file()
         _, ext = os.path.splitext(document.file_name)
-
+        
         with tempfile.TemporaryDirectory() as tmp_dir:
-            # حفظ الملف مؤقتاً
+            # حفظ الملف المؤقت
             pdf_path = os.path.join(tmp_dir, f'input{ext}')
             await file.download_to_drive(pdf_path)
-
+            
             # إنشاء مهمة تحويل في CloudConvert
             job_data = {
                 "tasks": {
@@ -53,23 +55,23 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "export-1": {"operation": "export/url", "input": ["task-1"]}
                 }
             }
-
+            
             headers = {'Authorization': f'Bearer {CLOUDCONVERT_API_KEY}'}
             response = requests.post('https://api.cloudconvert.com/v2/jobs', json=job_data, headers=headers)
             job = response.json()
-
+            
             if 'data' not in job or 'tasks' not in job['data']:
                 raise Exception('فشل في إنشاء مهمة التحويل')
-
+            
             # الحصول على معلومات الرفع
             upload_task = next(t for t in job['data']['tasks'] if t['name'] == 'import-1')
             upload_url = upload_task['result']['form']['url']
             upload_fields = upload_task['result']['form']['parameters']
-
+            
             # رفع الملف إلى CloudConvert
             with open(pdf_path, 'rb') as f:
                 requests.post(upload_url, data=upload_fields, files={'file': (document.file_name, f)})
-
+            
             # الانتظار حتى اكتمال التحويل
             export_task = next(t for t in job['data']['tasks'] if t['name'] == 'export-1')
             while True:
@@ -78,7 +80,7 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     headers=headers
                 )
                 task_data = task_response.json()['data']
-
+                
                 if task_data['status'] == 'finished':
                     html_url = task_data['result']['files'][0]['url']
                     break
@@ -86,45 +88,42 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_text('❌ فشل في عملية التحويل!')
                     return
                 await asyncio.sleep(2)
-
+            
             # تنزيل وتجهيز الملف الناتج
             html_response = requests.get(html_url)
-            original_filename = f'converted_{datetime.now().strftime("%Y%m%d%H%M%S")}.html'
+            original_html_content = html_response.content
+            output_filename = f'converted_{datetime.now().strftime("%Y%m%d%H%M%S")}.html'
 
-            # ترجمة الملف من الإنجليزية إلى العربية باستخدام LibreTranslate
-            try:
-                translation_payload = {
-                    "q": html_response.text,
-                    "source": "en",
-                    "target": "ar",
-                    "format": "html"
-                }
-                translation_resp = requests.post("https://libretranslate.com/translate", json=translation_payload)
-                translation_resp.raise_for_status()
-                translated_html = translation_resp.json()["translatedText"]
-                translated_bytes = translated_html.encode('utf-8')
-                translated_filename = f'converted_translated_{datetime.now().strftime("%Y%m%d%H%M%S")}.html'
-            except Exception as trans_ex:
-                print(f'Error in translation: {trans_ex}')
-                translated_bytes = None
-
-            # إرسال الملف الأصلي المحول
+            # إرسال الملف الناتج الأصلي
             await update.message.reply_document(
-                document=html_response.content,
-                filename=original_filename,
+                document=original_html_content,
+                filename=output_filename,
                 caption='تم التحويل بنجاح! ✅ (الملف الأصلي)'
             )
-
-            # إرسال الملف المترجم في حال نجاح الترجمة
-            if translated_bytes:
-                await update.message.reply_document(
-                    document=translated_bytes,
-                    filename=translated_filename,
-                    caption='تمت الترجمة إلى العربية! ✅ (الملف المترجم)'
-                )
-            else:
-                await update.message.reply_text('تم التحويل بنجاح ولكن فشلت عملية الترجمة! ⚠️')
-
+            
+            # ترجمة الملف
+            soup = BeautifulSoup(original_html_content, 'html.parser')
+            translator = Translator()
+            
+            for text_element in soup.find_all(text=True):
+                if text_element.parent.name not in ['style', 'script', 'head', 'title', '[document]']:
+                    try:
+                        translated_text = translator.translate(text_element, src='en', dest='ar').text
+                        text_element.replace_with(translated_text)
+                    except Exception as translate_error:
+                        print(f'Translation error: {translate_error}')
+                        continue
+            
+            translated_html_content = str(soup).encode('utf-8')
+            translated_output_filename = f'translated_{output_filename}'
+            
+            # إرسال الملف المترجم
+            await update.message.reply_document(
+                document=translated_html_content,
+                filename=translated_output_filename,
+                caption='تمت الترجمة بنجاح! ✅'
+            )
+            
     except Exception as e:
         print(f'Error: {e}')
         await update.message.reply_text('حدث خطأ أثناء المعالجة! ⚠️')
