@@ -2,7 +2,7 @@ import os
 import requests
 from dotenv import load_dotenv
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
+from telegram.ext import Application, MessageHandler, filters, CallbackContext
 
 # تحميل المتغيرات من ملف .env
 load_dotenv()
@@ -38,7 +38,10 @@ async def handle_document(update: Update, context: CallbackContext):
     file = update.message.document
     if file.mime_type == "application/pdf":
         file_path = f"{file.file_id}.pdf"
-        await file.get_file().download_to_drive(file_path)
+
+        # الحصول على الملف من تيليجرام ثم تحميله
+        telegram_file = await file.get_file()
+        await telegram_file.download_to_drive(file_path)
 
         await update.message.reply_text("جارٍ تحويل الملف، يرجى الانتظار...")
         task_id = convert_pdf_to_html(file_path)
