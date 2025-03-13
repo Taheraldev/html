@@ -1,33 +1,25 @@
-# استخدم صورة Python الرسمية
-FROM python:3.10-slim
+# استخدام صورة بايثون الأساسية
+FROM python:3.9-slim
 
-# تعيين متغير البيئة لعدم إنشاء ملفات Python bytecode
-ENV PYTHONUNBUFFERED=1
+# تعيين متغير البيئة لتجنب التفاعلات أثناء التثبيت
+ENV DEBIAN_FRONTEND=noninteractive
 
-# تثبيت المتطلبات الأساسية
+# تثبيت الأدوات والتبعيات المطلوبة
 RUN apt-get update && apt-get install -y \
-    gcc \
-    libffi-dev \
-    libpoppler-cpp-dev \
     poppler-utils \
-    libjpeg-dev \
-    zlib1g-dev \
-    libtiff5-dev \
-    libfreetype6-dev \
-    wget \
     && rm -rf /var/lib/apt/lists/*
 
-# إنشاء مجلد للتطبيق
+# تحديد مجلد العمل داخل الحاوية
 WORKDIR /app
 
-# نسخ ملفات التطبيق
-COPY . .
+# نسخ ملفات المشروع
+COPY requirements.txt .
 
-# تحديث pip
-RUN pip install --upgrade pip setuptools wheel
-
-# تثبيت المتطلبات من ملف requirements.txt
+# تثبيت المكتبات المطلوبة لبايثون
 RUN pip install --no-cache-dir -r requirements.txt
 
-# تشغيل البوت
+# نسخ باقي ملفات المشروع
+COPY . .
+
+# تشغيل البوت عند بدء الحاوية
 CMD ["python", "main.py"]
