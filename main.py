@@ -95,7 +95,7 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_document(
                 document=html_response.content,
                 filename=output_filename,
-                caption='تم التحويل بنجاح! ✅\n قم باعادة توجية هذا ملف للبوت مترجم :@i2PDFbot2 \n@ta_ja199 لاسستفسار'
+                caption='تم التحويل بنجاح! ✅'
             )
             
     except Exception as e:
