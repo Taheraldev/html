@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 import logging
 
 # استبدل هذا الرمز برمز API الخاص ببوتك
-TOKEN = '6016945663:AAGf2B4dpCo-nVFNXbyPUHuS9XwA1ugGa4Y'
+TOKEN = '6016945663:AAETwVMU3m27J5lcf7qKlc-90I26ABlY8wA'
 
 # تمكين التسجيل
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
