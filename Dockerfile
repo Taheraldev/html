@@ -1,19 +1,29 @@
-# استخدام صورة رسمية لـ Python
+# استخدم صورة Python الرسمية
 FROM python:3.10-slim
 
-# تعيين المجلد الافتراضي داخل الحاوية
+# تعيين متغير البيئة لعدم إنشاء ملفات Python bytecode
+ENV PYTHONUNBUFFERED=1
+
+# تثبيت المتطلبات الأساسية
+RUN apt-get update && apt-get install -y \
+    gcc \
+    libffi-dev \
+    libpoppler-cpp-dev \
+    poppler-utils \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# إنشاء مجلد للتطبيق
 WORKDIR /app
 
-# تثبيت الأدوات المطلوبة بما في ذلك pdftohtml
-RUN apt-get update && \
-    apt-get install -y poppler-utils python3 python3-pip && \
-    rm -rf /var/lib/apt/lists/*
+# نسخ ملفات التطبيق
+COPY . .
 
-# نسخ ملفات المشروع إلى الحاوية
-COPY . /app
+# تحديث pip
+RUN pip install --upgrade pip
 
-# تثبيت المكتبات المطلوبة
-RUN pip3 install --no-cache-dir -r requirements.txt
+# تثبيت المتطلبات من ملف requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# تحديد الأمر لتشغيل البوت
-CMD ["python3", "main.py"]
+# تشغيل البوت
+CMD ["python", "main.py"]
