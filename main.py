@@ -55,7 +55,7 @@ async def handle_pdf(update: Update, context: CallbackContext):
         await update.message.reply_text("❌ يرجى إرسال ملف PDF فقط.")
 
 def main():
-    token = os.getenv("5264968049:AAHUniq68Nqq39CrFf8lVqerwetirQnGxzc")
+    token = os.getenv("BOT_TOKEN")
 
     # إنشاء التطبيق باستخدام `Application.builder()`
     app = Application.builder().token(token).build()
