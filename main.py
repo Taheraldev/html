@@ -5,7 +5,7 @@ from telegram.ext import (
     CommandHandler,
     MessageHandler,
     ContextTypes,
-    filters
+    filters  # تم تغيير Filters إلى filters
 )
 from bs4 import BeautifulSoup
 from googletrans import Translator
