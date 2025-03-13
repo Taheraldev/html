@@ -6,10 +6,9 @@ import io
 import logging
 
 
-TELEGRAM_TOKEN = "6016945663:AAETwVMU3m27J5lcf7qKlc-90I26ABlY8wA"  # تم إضافة التوكن هنا
-MYMEMORY_API_KEY = "c9e7523ff7269bdbb2cc"   # مفتاح MyMemory API
+TELEGRAM_TOKEN = "6334414905:AAFK59exfc4HuQQJdxk-mwONn5K4yODCIJg"
+MYMEMORY_API_KEY = "c9e7523ff7269bdbb2cc"
 
-# إعداد التسجيل (للأخطاء)
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -17,7 +16,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 async def translate_text(text: str, source_lang: str = 'en', target_lang: str = 'ar') -> str:
-    """ترجمة النص باستخدام MyMemory API."""
     url = "https://api.mymemory.translated.net/get"
     params = {
         'q': text,
@@ -27,7 +25,7 @@ async def translate_text(text: str, source_lang: str = 'en', target_lang: str = 
     
     try:
         response = requests.get(url, params=params)
-        response.raise_for_status()  # تحقق من الأخطاء
+        response.raise_for_status()
         data = response.json()
         
         if data['responseStatus'] == 200:
@@ -40,13 +38,18 @@ async def translate_text(text: str, source_lang: str = 'en', target_lang: str = 
         return text
 
 async def handle_html_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالجة ملف HTML المرسل."""
     user = update.message.from_user
     document = update.message.document
     
     # تحقق من أن الملف HTML
     if document.mime_type != "text/html" and not document.file_name.endswith('.html'):
         await update.message.reply_text("⚠️ يرجى إرسال ملف HTML صحيح.")
+        return
+    
+    # تحقق من حجم الملف (2MB كحد أقصى)
+    max_size = 2 * 1024 * 1024  # 2MB بالبايت
+    if document.file_size > max_size:
+        await update.message.reply_text("⚠️ حجم الملف يتجاوز الحد المسموح (2MB).")
         return
     
     # تنزيل الملف
@@ -59,7 +62,7 @@ async def handle_html_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # تحليل HTML واستخراج النصوص
     soup = BeautifulSoup(html_content, 'html.parser')
     
-    # تجميع النصوص المتجاورة وترجمتها معًا
+    # ترجمة النصوص
     for element in soup.find_all(string=True):
         if element.parent.name in ['script', 'style', 'meta', 'noscript']:
             continue
@@ -74,21 +77,17 @@ async def handle_html_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # إرسال الملف المترجم
     output = io.BytesIO(translated_html.encode('utf-8'))
     output.name = "translated_ar.html"
-    await update.message.reply_document(document=InputFile(output), caption="✅ تم الترجمة بنجاح!")
+    await update.message.reply_document(document=InputFile(output), caption="✅ تم الترجمة بنجاح!\nقم بعادة توجية هذا ملف للبوت رئيسي لكي يتم تحويلة لpdf :@i2pdfbot \n@ta_ja199 لاستفسار")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """رسالة الترحيب."""
-    await update.message.reply_text("مرحبًا! أرسل لي ملف HTML وسأترجمه إلى العربية.")
+    await update.message.reply_text("مرحبًا! أرسل لي ملف HTML (بحد أقصى 2MB) وسأترجمه إلى العربية.\n  بوت تابع ل@i2pdfbot \n@ta_ja199 dev")
 
 def main():
-    # تشغيل البوت
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     
-    # إضافة handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.Document.ALL, handle_html_file))
     
-    # بدء الاستماع للتحديثات
     application.run_polling()
 
 if __name__ == "__main__":
