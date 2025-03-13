@@ -18,14 +18,24 @@ CLOUDCONVERT_API_KEY = os.getenv('CLOUDCONVERT_API_KEY')
 
 # أمر /start للتعريف بالبوت
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # التأكد من تهيئة user_data
+    if context.user_data is None:
+        context.user_data = {}
     await update.message.reply_text('مرحبًا! لإستخدام البوت، يُرجى أولاً إرسال أمر /h لتفعيل عملية التحويل.')
 
 # أمر /h لتفعيل وضع تحويل ملفات PDF
 async def enable_pdf_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # التأكد من تهيئة user_data
+    if context.user_data is None:
+        context.user_data = {}
     context.user_data["pdf_mode"] = True
     await update.message.reply_text('تم تفعيل وضع التحويل، الآن يمكنك إرسال ملف PDF.')
 
 async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # التأكد من تهيئة user_data
+    if context.user_data is None:
+        context.user_data = {}
+        
     # التحقق من تفعيل الأمر /h
     if not context.user_data.get("pdf_mode"):
         await update.message.reply_text('يرجى إرسال أمر /h أولاً لتفعيل عملية التحويل.')
@@ -121,7 +131,8 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text('حدث خطأ أثناء المعالجة! ⚠️')
     finally:
         # إزالة علم تحويل PDF لضمان إرسال أمر /h في كل مرة
-        context.user_data.pop("pdf_mode", None)
+        if context.user_data:
+            context.user_data.pop("pdf_mode", None)
 
 if __name__ == '__main__':
     # تهيئة البوت
