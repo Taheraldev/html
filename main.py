@@ -1,11 +1,11 @@
 import os
 from telegram import Update
 from telegram.ext import (
-    Updater,
+    Application,  # تم استبدال Updater بـ Application
     CommandHandler,
     MessageHandler,
-    CallbackContext,
-    filters  # تم تغيير الاسم هنا
+    ContextTypes,
+    filters
 )
 from bs4 import BeautifulSoup
 from googletrans import Translator
@@ -14,20 +14,20 @@ from googletrans import Translator
 TOKEN = "6016945663:AAGf2B4dpCo-nVFNXbyPUHuS9XwA1ugGa4Y"
 translator = Translator()
 
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text('مرحبا! أرسل لي ملف HTML وسأقوم بترجمته إلى العربية مع الحفاظ على التنسيق.')
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text('مرحبا! أرسل لي ملف HTML وسأقوم بترجمته إلى العربية مع الحفاظ على التنسيق.')
 
-def handle_document(update: Update, context: CallbackContext):
+async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         # تحميل الملف
-        file = update.message.document.get_file()
+        file = await update.message.document.get_file()
         filename = update.message.document.file_name
         
         if not filename.lower().endswith('.html'):
-            update.message.reply_text('يرجى إرسال ملف HTML فقط.')
+            await update.message.reply_text('يرجى إرسال ملف HTML فقط.')
             return
             
-        downloaded_file = file.download()
+        downloaded_file = await file.download_to_drive()
         
         # قراءة الملف
         with open(downloaded_file, 'r', encoding='utf-8') as f:
@@ -57,27 +57,25 @@ def handle_document(update: Update, context: CallbackContext):
             f.write(translated_html)
         
         # إرسال الملف المترجم
-        update.message.reply_document(document=open(output_filename, 'rb'))
+        await update.message.reply_document(document=open(output_filename, 'rb'))
         
         # تنظيف الملفات المؤقتة
         os.remove(downloaded_file)
         os.remove(output_filename)
         
     except Exception as e:
-        update.message.reply_text(f'حدث خطأ: {str(e)}')
+        await update.message.reply_text(f'حدث خطأ: {str(e)}')
 
 def main():
-    # إنشاء Updater
-    updater = Updater(TOKEN)
-    dp = updater.dispatcher
+    # إنشاء Application بدلاً من Updater
+    application = Application.builder().token(TOKEN).build()
     
     # إضافة handlers
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(filters.Document.ALL, handle_document))  # تم التعديل هنا
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     
     # بدء البوت
-    updater.start_polling()
-    updater.idle()
+    application.run_polling()
 
 if __name__ == '__main__':
     main()
