@@ -1,10 +1,10 @@
-import telegram
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 import logging
 import subprocess
 import os
 import tempfile
-import time
+import asyncio
+from telegram import Update, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackContext
 
 # استبدل هذا الرمز برمز API الخاص ببوتك
 TOKEN = '6016945663:AAETwVMU3m27J5lcf7qKlc-90I26ABlY8wA'
@@ -13,15 +13,15 @@ TOKEN = '6016945663:AAETwVMU3m27J5lcf7qKlc-90I26ABlY8wA'
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def start(update, context):
-    update.message.reply_text('أرسل لي ملف HTML لترجمته.')
+async def start(update: Update, context: CallbackContext):
+    await update.message.reply_text('أرسل لي ملف HTML لترجمته.')
 
-def translate_html(update, context):
-    file = context.bot.get_file(update.message.document.file_id)
-    file_path = file.download()
+async def translate_html(update: Update, context: CallbackContext):
+    file = await context.bot.get_file(update.message.document.file_id)
+    file_path = await file.download_to_drive()
 
     try:
-        # إنشاء ملفات مؤقتة واستخدامها داخل كتلة الـ with
+        # إنشاء ملفات مؤقتة
         with tempfile.TemporaryDirectory() as temp_dir:
             po_file = os.path.join(temp_dir, 'output.po')
             translated_po_file = os.path.join(temp_dir, 'translated.po')
@@ -30,7 +30,7 @@ def translate_html(update, context):
             # استخراج النصوص إلى ملف PO
             subprocess.run(['pofilter', '-i', file_path, '-x', 'html', '-o', po_file], check=True)
 
-            # ترجمة ملف PO باستخدام translate-toolkit (يمكنك استخدام خدمة ترجمة أخرى هنا)
+            # ترجمة ملف PO باستخدام translate-toolkit
             subprocess.run(['translate', '-i', po_file, '-o', translated_po_file,
                             '--target-language', 'en', '--source-language', 'ar', '--engine', 'google'], check=True)
 
@@ -39,33 +39,25 @@ def translate_html(update, context):
 
             # إرسال الملف المترجم
             with open(translated_html_file, 'rb') as f:
-                context.bot.send_document(chat_id=update.effective_chat.id, document=f, filename='translated.html')
+                await context.bot.send_document(chat_id=update.effective_chat.id, document=f, filename='translated.html')
 
     except subprocess.CalledProcessError as e:
         logger.error(f"Error during translation: {e}")
-        update.message.reply_text('حدث خطأ أثناء الترجمة.')
+        await update.message.reply_text('حدث خطأ أثناء الترجمة.')
     except Exception as e:
         logger.error(f"An error occurred: {e}")
-        update.message.reply_text(f'حدث خطأ: {e}')
+        await update.message.reply_text(f'حدث خطأ: {e}')
 
-def main():
-    # إزالة use_context=True لأنه غير مدعوم في هذه النسخة
-    updater = Updater(TOKEN)
-    dp = updater.dispatcher
+async def main():
+    # إنشاء التطبيق بطريقة حديثة
+    app = Application.builder().token(TOKEN).build()
 
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(Filters.document.mime_type('text/html'), translate_html))
+    # إضافة الأوامر والمعالجات
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.Document.MimeType('text/html'), translate_html))
 
-    while True:
-        try:
-            updater.start_polling()
-            updater.idle()
-        except telegram.error.TimedOut:
-            logger.warning("Connection timed out. Retrying in 10 seconds...")
-            time.sleep(10)
-        except Exception as e:
-            logger.error(f"An error occurred: {e}")
-            time.sleep(10)
+    # تشغيل البوت
+    await app.run_polling()
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())
