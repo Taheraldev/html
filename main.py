@@ -1,7 +1,7 @@
 import os
 import logging
 import subprocess
-from telegram import Update, InputFile
+from telegram import Update
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 from bs4 import BeautifulSoup
 from googletrans import Translator
@@ -40,14 +40,18 @@ def translate_html(file_path: str) -> str:
                 logger.error(f"حدث خطأ أثناء الترجمة: {e}")
     return str(soup)
 
-def convert_pdf_to_html(pdf_path: str, output_html_path: str):
-    """ يحول ملف PDF إلى HTML باستخدام poppler-utils (pdf2htmlEX) """
+def convert_pdf_to_html(pdf_path: str, output_folder: str) -> str:
+    """ يحول ملف PDF إلى HTML باستخدام pdftohtml """
+    os.makedirs(output_folder, exist_ok=True)
+    output_html = os.path.join(output_folder, "output.html")
+
     try:
-        subprocess.run(["pdf2htmlEX", pdf_path, output_html_path], check=True)
-        return True
+        command = ["pdftohtml", "-c", "-noframes", pdf_path, output_html]
+        subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        return output_html
     except subprocess.CalledProcessError as e:
         logger.error(f"فشل تحويل PDF إلى HTML: {e}")
-        return False
+        return None
 
 def handle_file(update: Update, context: CallbackContext):
     document = update.message.document
@@ -87,10 +91,10 @@ def handle_file(update: Update, context: CallbackContext):
 
         elif file_extension == 'pdf':
             update.message.reply_text("🔄 جاري تحويل PDF إلى HTML، يرجى الانتظار...")
-            output_html_path = f"converted_{file_name.replace('.pdf', '.html')}"
-            success = convert_pdf_to_html(original_file_path, output_html_path)
+            output_folder = f"output_html_{file_name.replace('.pdf', '')}"
+            output_html_path = convert_pdf_to_html(original_file_path, output_folder)
 
-            if success:
+            if output_html_path:
                 context.bot.send_document(
                     chat_id=update.message.chat_id,
                     document=open(output_html_path, 'rb'),
