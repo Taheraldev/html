@@ -1,5 +1,5 @@
-# استخدام صورة رسمية لـ Python
-FROM python:3.10-slim
+# استخدام صورة Python الكاملة بدلاً من slim
+FROM python:3.10
 
 # تعيين المجلد الافتراضي داخل الحاوية
 WORKDIR /app
@@ -15,7 +15,7 @@ RUN apt-get update && \
     libfontforge-dev \
     pkg-config \
     libspiro-dev \
-    python-dev \
+    python3-dev \
     libjpeg-dev \
     libtiff-dev \
     libpng-dev \
