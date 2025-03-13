@@ -2,9 +2,14 @@ import telegram
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 from googletrans import Translator
 from bs4 import BeautifulSoup
+import logging
 
 # استبدل هذا الرمز برمز API الخاص ببوتك
 TOKEN = '6016945663:AAGf2B4dpCo-nVFNXbyPUHuS9XwA1ugGa4Y'
+
+# تمكين التسجيل
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def start(update, context):
     update.message.reply_text('أرسل لي ملف HTML لترجمته.')
@@ -20,18 +25,21 @@ def translate_html(update, context):
         soup = BeautifulSoup(html_content, 'html.parser')
         translator = Translator()
 
-        # ترجمة النصوص داخل عناصر HTML
         for element in soup.find_all(text=True):
-            if element.parent.name not in ['style', 'script']:  # استثناء عناصر الستايل والسكربت
-                translated_text = translator.translate(element, src='ar', dest='en').text
-                element.replace_with(translated_text)
+            if element and element.strip() and element.parent.name not in ['style', 'script']:
+                try:
+                    translated_text = translator.translate(element, src='ar', dest='en').text
+                    element.replace_with(translated_text)
+                except Exception as translate_error:
+                    logger.error(f"Translation error: {translate_error}")
+                    # يمكنك هنا اضافة بدائل للتعامل مع الخطأ مثل ترك النص بدون ترجمة.
 
         translated_html = str(soup)
 
-        # إرسال الملف المترجم
         context.bot.send_document(chat_id=update.effective_chat.id, document=translated_html.encode('utf-8'), filename='translated.html')
 
     except Exception as e:
+        logger.error(f"An error occurred: {e}")
         update.message.reply_text(f'حدث خطأ: {e}')
 
 def main():
