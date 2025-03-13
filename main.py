@@ -20,7 +20,7 @@ CLOUDCONVERT_API_KEY = os.getenv('CLOUDCONVERT_API_KEY')
 # تعريف الحالة للمحادثة
 WAITING_FOR_PDF = 1
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def htmlc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         'مرحبًا! لإستخدام البوت، يُرجى إرسال أمر /h لتفعيل عملية التحويل.'
     )
@@ -119,7 +119,7 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_document(
                 document=html_response.content,
                 filename=output_filename,
-                caption='تم التحويل بنجاح! ✅'
+                caption='تم التحويل بنجاح! ✅\n قم باعادة توجية هذا ملف للبوت مترجم :@i2PDFbot2 \n@ta_ja199 لاسستفسار'
             )
     except Exception as e:
         print(f'Error: {e}')
@@ -144,7 +144,7 @@ if __name__ == '__main__':
         fallbacks=[CommandHandler('cancel', cancel)]
     )
 
-    app.add_handler(CommandHandler('start', start))
+    app.add_handler(CommandHandler('htmlc', htmlc))
     app.add_handler(conv_handler)
 
     # بدء البوت
