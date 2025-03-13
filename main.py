@@ -41,46 +41,63 @@ async def handle_html_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     document = update.message.document
     
-    # تحقق من أن الملف HTML
+    # التحقق من نوع الملف
     if document.mime_type != "text/html" and not document.file_name.endswith('.html'):
         await update.message.reply_text("⚠️ يرجى إرسال ملف HTML صحيح.")
         return
     
-    # تحقق من حجم الملف (2MB كحد أقصى)
-    max_size = 2 * 1024 * 1024  # 2MB بالبايت
+    # التحقق من حجم الملف
+    max_size = 2 * 1024 * 1024  # 2MB
     if document.file_size > max_size:
         await update.message.reply_text("⚠️ حجم الملف يتجاوز الحد المسموح (2MB).")
         return
     
-    # تنزيل الملف
-    file = await context.bot.get_file(document.file_id)
-    file_stream = io.BytesIO()
-    await file.download_to_memory(out=file_stream)
-    file_stream.seek(0)
-    html_content = file_stream.read().decode('utf-8')
+    # إرسال رسالة الانتظار
+    processing_msg = await update.message.reply_text("⏳ تجري عملية الترجمة، الرجاء الانتظار...")
     
-    # تحليل HTML واستخراج النصوص
-    soup = BeautifulSoup(html_content, 'html.parser')
-    
-    # ترجمة النصوص
-    for element in soup.find_all(string=True):
-        if element.parent.name in ['script', 'style', 'meta', 'noscript']:
-            continue
-        stripped_text = element.strip()
-        if stripped_text:
-            translated_text = await translate_text(stripped_text)
-            element.replace_with(translated_text)
-    
-    # إعادة بناء HTML المترجم
-    translated_html = str(soup)
-    
-    # إرسال الملف المترجم
-    output = io.BytesIO(translated_html.encode('utf-8'))
-    output.name = "translated_ar.html"
-    await update.message.reply_document(document=InputFile(output), caption="✅ تم الترجمة بنجاح!\nقم بعادة توجية هذا ملف للبوت رئيسي لكي يتم تحويلة لpdf :@i2pdfbot \n@ta_ja199 لاستفسار")
+    try:
+        # تنزيل الملف
+        file = await context.bot.get_file(document.file_id)
+        file_stream = io.BytesIO()
+        await file.download_to_memory(out=file_stream)
+        file_stream.seek(0)
+        html_content = file_stream.read().decode('utf-8')
+        
+        # معالجة وترجمة المحتوى
+        soup = BeautifulSoup(html_content, 'html.parser')
+        
+        for element in soup.find_all(string=True):
+            if element.parent.name in ['script', 'style', 'meta', 'noscript']:
+                continue
+            stripped_text = element.strip()
+            if stripped_text:
+                translated_text = await translate_text(stripped_text)
+                element.replace_with(translated_text)
+        
+        translated_html = str(soup)
+        
+        # إرسال الملف المترجم
+        output = io.BytesIO(translated_html.encode('utf-8'))
+        output.name = "translated_ar.html"
+        await update.message.reply_document(
+            document=InputFile(output),
+            caption="✅ تم الترجمة بنجاح!\nقم بإعادة توجيه هذا الملف للبوت الرئيسي لتحويله إلى PDF: @i2pdfbot \n@ta_ja199 للاستفسار"
+        )
+        
+    except Exception as e:
+        logger.error(f"Error processing file: {e}")
+        await update.message.reply_text("❌ حدث خطأ أثناء المعالجة. يرجى المحاولة لاحقًا.")
+        
+    finally:
+        # حذف رسالة الانتظار بعد الانتهاء
+        await context.bot.delete_message(chat_id=update.message.chat_id, message_id=processing_msg.message_id)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("مرحبًا! أرسل لي ملف HTML (بحد أقصى 2MB) وسأترجمه إلى العربية.\n  بوت تابع ل@i2pdfbot \n@ta_ja199 dev")
+    await update.message.reply_text(
+        "مرحبًا! أرسل لي ملف HTML (بحد أقصى 2MB) وسأترجمه إلى العربية.\n"
+        "بوت تابع لـ @i2pdfbot \n"
+        "المطور: @ta_ja199"
+    )
 
 def main():
     application = Application.builder().token(TELEGRAM_TOKEN).build()
