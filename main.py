@@ -1,9 +1,11 @@
 import telegram
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+from telegram.ext import Updater, CommandHandler, MessageHandler
+from telegram.ext.filters import Filters # تعديل سطر الاستيراد
 import logging
 import subprocess
 import os
 import tempfile
+import time
 
 # استبدل هذا الرمز برمز API الخاص ببوتك
 TOKEN = '6016945663:AAETwVMU3m27J5lcf7qKlc-90I26ABlY8wA'
