@@ -1,6 +1,5 @@
 import telegram
-from telegram.ext import Updater, CommandHandler, MessageHandler
-from telegram.ext import filters
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 import logging
 import subprocess
 import os
@@ -22,24 +21,25 @@ def translate_html(update, context):
     file_path = file.download()
 
     try:
-        # إنشاء ملفات مؤقتة
+        # إنشاء ملفات مؤقتة واستخدامها داخل كتلة الـ with
         with tempfile.TemporaryDirectory() as temp_dir:
             po_file = os.path.join(temp_dir, 'output.po')
             translated_po_file = os.path.join(temp_dir, 'translated.po')
             translated_html_file = os.path.join(temp_dir, 'translated.html')
 
-        # استخراج النصوص إلى ملف PO
-        subprocess.run(['pofilter', '-i', file_path, '-x', 'html', '-o', po_file], check=True)
+            # استخراج النصوص إلى ملف PO
+            subprocess.run(['pofilter', '-i', file_path, '-x', 'html', '-o', po_file], check=True)
 
-        # ترجمة ملف PO باستخدام translate-toolkit (يمكنك استخدام خدمة ترجمة أخرى هنا)
-        subprocess.run(['translate', '-i', po_file, '-o', translated_po_file, '--target-language', 'en', '--source-language', 'ar', '--engine', 'google'], check=True)
+            # ترجمة ملف PO باستخدام translate-toolkit (يمكنك استخدام خدمة ترجمة أخرى هنا)
+            subprocess.run(['translate', '-i', po_file, '-o', translated_po_file,
+                            '--target-language', 'en', '--source-language', 'ar', '--engine', 'google'], check=True)
 
-        # دمج النصوص المترجمة في ملف HTML الأصلي
-        subprocess.run(['pomerge', '-i', translated_po_file, '-p', file_path, '-o', translated_html_file], check=True)
+            # دمج النصوص المترجمة في ملف HTML الأصلي
+            subprocess.run(['pomerge', '-i', translated_po_file, '-p', file_path, '-o', translated_html_file], check=True)
 
-        # إرسال الملف المترجم
-        with open(translated_html_file, 'rb') as f:
-            context.bot.send_document(chat_id=update.effective_chat.id, document=f, filename='translated.html')
+            # إرسال الملف المترجم
+            with open(translated_html_file, 'rb') as f:
+                context.bot.send_document(chat_id=update.effective_chat.id, document=f, filename='translated.html')
 
     except subprocess.CalledProcessError as e:
         logger.error(f"Error during translation: {e}")
@@ -49,21 +49,22 @@ def translate_html(update, context):
         update.message.reply_text(f'حدث خطأ: {e}')
 
 def main():
-    updater = Updater(TOKEN) # ازالة use_context=True
+    # إزالة use_context=True لأنه غير مدعوم في هذه النسخة
+    updater = Updater(TOKEN)
     dp = updater.dispatcher
 
     dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(filters.Document.mime_type('text/html'), translate_html))
+    dp.add_handler(MessageHandler(Filters.document.mime_type('text/html'), translate_html))
 
     while True:
         try:
             updater.start_polling()
             updater.idle()
         except telegram.error.TimedOut:
-            logging.warning("Connection timed out. Retrying in 10 seconds...")
+            logger.warning("Connection timed out. Retrying in 10 seconds...")
             time.sleep(10)
         except Exception as e:
-            logging.error(f"An error occurred: {e}")
+            logger.error(f"An error occurred: {e}")
             time.sleep(10)
 
 if __name__ == '__main__':
