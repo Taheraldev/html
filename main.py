@@ -8,6 +8,7 @@ from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
+    ConversationHandler,
     filters,
     ContextTypes
 )
@@ -16,48 +17,42 @@ from telegram.ext import (
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 CLOUDCONVERT_API_KEY = os.getenv('CLOUDCONVERT_API_KEY')
 
-# أمر /start للتعريف بالبوت
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # التأكد من تهيئة user_data
-    if context.user_data is None:
-        context.user_data = {}
-    await update.message.reply_text('مرحبًا! لإستخدام البوت، يُرجى أولاً إرسال أمر /h لتفعيل عملية التحويل.')
+# تعريف الحالة للمحادثة
+WAITING_FOR_PDF = 1
 
-# أمر /h لتفعيل وضع تحويل ملفات PDF
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        'مرحبًا! لإستخدام البوت، يُرجى إرسال أمر /h لتفعيل عملية التحويل.'
+    )
+    return ConversationHandler.END
+
+# أمر /h لتفعيل وضع تحويل ملفات PDF والدخول إلى حالة الانتظار
 async def enable_pdf_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # التأكد من تهيئة user_data
-    if context.user_data is None:
-        context.user_data = {}
-    context.user_data["pdf_mode"] = True
-    await update.message.reply_text('تم تفعيل وضع التحويل، الآن يمكنك إرسال ملف PDF.')
+    await update.message.reply_text(
+        'تم تفعيل وضع التحويل، الآن يمكنك إرسال ملف PDF.'
+    )
+    return WAITING_FOR_PDF
 
 async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # التأكد من تهيئة user_data
-    if context.user_data is None:
-        context.user_data = {}
-        
-    # التحقق من تفعيل الأمر /h
-    if not context.user_data.get("pdf_mode"):
-        await update.message.reply_text('يرجى إرسال أمر /h أولاً لتفعيل عملية التحويل.')
-        return
-
-    if not update.message.document:
+    # التحقق من أن المستخدم في حالة انتظار الملف
+    if update.message.document is None:
         await update.message.reply_text('يرجى إرسال ملف PDF.')
-        return
+        return WAITING_FOR_PDF
 
     document = update.message.document
 
+    # التحقق من نوع الملف
     if document.mime_type != 'application/pdf':
         await update.message.reply_text('الملف ليس بصيغة PDF!')
-        return
+        return WAITING_FOR_PDF
 
     # التحقق من حجم الملف (5MB = 5 * 1024 * 1024 بايت)
     if document.file_size > 5 * 1024 * 1024:
         await update.message.reply_text('حجم الملف المرسل يتجاوز الحد الأقصى 5MB.')
-        return
+        return WAITING_FOR_PDF
 
     try:
-        # إرسال رسالة توضيحية ببدء المعالجة
+        # إعلام المستخدم ببدء المعالجة
         await update.message.reply_text('جاري معالجة، انتظر بعض وق...')
         
         # تنزيل الملف المؤقت
@@ -113,7 +108,7 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     break
                 elif task_data['status'] in ['error', 'cancelled']:
                     await update.message.reply_text('❌ فشل في عملية التحويل!')
-                    return
+                    return ConversationHandler.END
                 await asyncio.sleep(2)
 
             # تنزيل وتجهيز الملف الناتج
@@ -129,19 +124,28 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print(f'Error: {e}')
         await update.message.reply_text('حدث خطأ أثناء المعالجة! ⚠️')
-    finally:
-        # إزالة علم تحويل PDF لضمان إرسال أمر /h في كل مرة
-        if context.user_data:
-            context.user_data.pop("pdf_mode", None)
+
+    # انتهاء المحادثة حتى يُجبر المستخدم على إعادة إرسال /h إذا رغب في تحويل ملف آخر
+    return ConversationHandler.END
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text('تم إلغاء العملية.')
+    return ConversationHandler.END
 
 if __name__ == '__main__':
     # تهيئة البوت
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
-    # إضافة handlers
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('h', enable_pdf_mode)],
+        states={
+            WAITING_FOR_PDF: [MessageHandler(filters.Document.ALL, handle_pdf)]
+        },
+        fallbacks=[CommandHandler('cancel', cancel)]
+    )
+
     app.add_handler(CommandHandler('start', start))
-    app.add_handler(CommandHandler('h', enable_pdf_mode))
-    app.add_handler(MessageHandler(filters.Document.ALL, handle_pdf))
+    app.add_handler(conv_handler)
 
     # بدء البوت
     print('Bot is running...')
