@@ -1,48 +1,38 @@
-# استخدام صورة Python الكاملة بدلاً من slim
-FROM python:3.10
+# استخدام صورة أساسية تحتوي على Python
+FROM python:3.9-slim
 
-# تعيين المجلد الافتراضي داخل الحاوية
-WORKDIR /app
+# إعداد المتغيرات البيئية لتجنب تفاعلات apt
+ENV DEBIAN_FRONTEND=noninteractive
 
-# تثبيت المتطلبات الأساسية وتبعيات البناء
-RUN apt-get update && \
-    apt-get install -y \
-    wget \
+# تثبيت التبعيات اللازمة
+RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
-    libpoppler-glib-dev \
-    poppler-utils \
-    libfontforge-dev \
-    pkg-config \
-    libspiro-dev \
-    python3-dev \
-    libjpeg-dev \
-    libtiff-dev \
-    libpng-dev \
-    libgif-dev \
-    libxt-dev \
-    libcairo2-dev \
-    libpango1.0-dev \
-    libpangocairo-1.0-0 \
     git \
+    libfontconfig1-dev \
+    libpoppler-cpp-dev \
+    libpoppler-private-dev \
+    libpng-dev \
+    libjpeg-dev \
+    libssl-dev \
+    libx11-dev \
+    libxext-dev \
+    libxi-dev \
+    libxrender-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# تنزيل وتثبيت pdf2htmlEX من المصدر
-RUN wget https://github.com/coolwanglu/pdf2htmlEX/archive/refs/tags/v0.18.8.tar.gz -O pdf2htmlEX.tar.gz \
-    && tar -xzf pdf2htmlEX.tar.gz \
-    && mkdir pdf2htmlEX-0.18.8/build \
-    && cd pdf2htmlEX-0.18.8/build \
-    && cmake .. \
-    && make \
-    && make install \
-    && cd /app \
-    && rm -rf pdf2htmlEX.tar.gz pdf2htmlEX-0.18.8
+# استنساخ وبناء pdf2htmlEX من المصدر
+RUN git clone --depth 1 https://github.com/coolwanglu/pdf2htmlEX.git /opt/pdf2htmlEX \
+    && cd /opt/pdf2htmlEX \
+    && cmake . \
+    && make -j$(nproc) \
+    && make install
 
-# نسخ ملفات المشروع إلى الحاوية
-COPY . /app
-
-# تثبيت المكتبات المطلوبة
+# نسخ ملفات التطبيق وتثبيت تبعيات Python
+WORKDIR /app
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
 
-# تحديد الأمر لتشغيل البوت
-CMD ["python", "bot.py"]
+# تشغيل التطبيق (قم بتعديل الأمر بما يناسب تطبيقك)
+CMD ["python", "main.py"]
