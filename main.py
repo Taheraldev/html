@@ -7,7 +7,7 @@ import logging
 
 
 TELEGRAM_TOKEN = "6334414905:AAFK59exfc4HuQQJdxk-mwONn5K4yODCIJg"
-MYMEMORY_API_KEY = "c9e7523ff7269bdbb2cc"
+MYMEMORY_API_KEY = "7dfa552fac8aad334ae1"
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
