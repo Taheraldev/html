@@ -1,19 +1,17 @@
-# استخدم صورة Python الرسمية
+# استخدام صورة رسمية لـ Python
 FROM python:3.10-slim
 
-# تثبيت الأدوات المطلوبة، بما في ذلك pdftohtml
-RUN apt-get update && apt-get install -y \
-    poppler-utils \
-    && rm -rf /var/lib/apt/lists/*
-
-# تحديد مجلد العمل
+# تعيين المجلد الافتراضي داخل الحاوية
 WORKDIR /app
 
-# نسخ الملفات إلى الحاوية
+# تثبيت المتطلبات الأساسية (Poppler-utils لتحويل PDF إلى HTML)
+RUN apt-get update && apt-get install -y poppler-utils pdf2htmlEX && rm -rf /var/lib/apt/lists/*
+
+# نسخ ملفات المشروع إلى الحاوية
 COPY . /app
 
-# تثبيت المتطلبات
+# تثبيت المكتبات المطلوبة
 RUN pip install --no-cache-dir -r requirements.txt
 
-# تشغيل البوت
-CMD ["python", "main.py"]
+# تحديد الأمر لتشغيل البوت
+CMD ["python", "bot.py"]
