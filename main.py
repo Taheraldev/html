@@ -66,7 +66,7 @@ def handle_pdf(update: Update, context: CallbackContext):
 
 def main():
     # ضع هنا توكن البوت الخاص بك
-    token = "YOUR_BOT_TOKEN"
+    token = "5264968049:AAHUniq68Nqq39CrFf8lVqerwetirQnGxzc"
     
     updater = Updater(token, use_context=True)
     dp = updater.dispatcher
