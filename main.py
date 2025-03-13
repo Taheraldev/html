@@ -1,81 +1,48 @@
-import os
-from telegram import Update
-from telegram.ext import (
-    Application,  # تم استبدال Updater بـ Application
-    CommandHandler,
-    MessageHandler,
-    ContextTypes,
-    filters  # تم تغيير Filters إلى filters
-)
-from bs4 import BeautifulSoup
+import telegram
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 from googletrans import Translator
+from bs4 import BeautifulSoup
 
-# استبدل 'TOKEN' بالتوكن الخاص ببوتك
-TOKEN = "6016945663:AAGf2B4dpCo-nVFNXbyPUHuS9XwA1ugGa4Y"
-translator = Translator()
+# استبدل هذا الرمز برمز API الخاص ببوتك
+TOKEN = '6016945663:AAGf2B4dpCo-nVFNXbyPUHuS9XwA1ugGa4Y'
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('مرحبا! أرسل لي ملف HTML وسأقوم بترجمته إلى العربية مع الحفاظ على التنسيق.')
+def start(update, context):
+    update.message.reply_text('أرسل لي ملف HTML لترجمته.')
 
-async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def translate_html(update, context):
+    file = context.bot.get_file(update.message.document.file_id)
+    file_path = file.download()
+
     try:
-        # تحميل الملف
-        file = await update.message.document.get_file()
-        filename = update.message.document.file_name
-        
-        if not filename.lower().endswith('.html'):
-            await update.message.reply_text('يرجى إرسال ملف HTML فقط.')
-            return
-            
-        downloaded_file = await file.download_to_drive()
-        
-        # قراءة الملف
-        with open(downloaded_file, 'r', encoding='utf-8') as f:
+        with open(file_path, 'r', encoding='utf-8') as f:
             html_content = f.read()
-        
-        # تحليل HTML
+
         soup = BeautifulSoup(html_content, 'html.parser')
-        
-        # ترجمة النص مع الحفاظ على الهيكل
-        def translate_text(element):
-            if element.string and element.string.strip():
-                try:
-                    translated = translator.translate(element.string, src='en', dest='ar').text
-                    element.string.replace_with(translated)
-                except:
-                    pass  # تجاهل الأخطاء في حال وجودها
-        
+        translator = Translator()
+
+        # ترجمة النصوص داخل عناصر HTML
         for element in soup.find_all(text=True):
-            if element.parent.name not in ['script', 'style', 'meta', 'noscript']:
-                translate_text(element)
-        
-        # حفظ الملف المترجم
-        translated_html = soup.prettify()
-        output_filename = f"translated_{filename}"
-        
-        with open(output_filename, 'w', encoding='utf-8') as f:
-            f.write(translated_html)
-        
+            if element.parent.name not in ['style', 'script']:  # استثناء عناصر الستايل والسكربت
+                translated_text = translator.translate(element, src='ar', dest='en').text
+                element.replace_with(translated_text)
+
+        translated_html = str(soup)
+
         # إرسال الملف المترجم
-        await update.message.reply_document(document=open(output_filename, 'rb'))
-        
-        # تنظيف الملفات المؤقتة
-        os.remove(downloaded_file)
-        os.remove(output_filename)
-        
+        context.bot.send_document(chat_id=update.effective_chat.id, document=translated_html.encode('utf-8'), filename='translated.html')
+
     except Exception as e:
-        await update.message.reply_text(f'حدث خطأ: {str(e)}')
+        update.message.reply_text(f'حدث خطأ: {e}')
 
 def main():
-    # إنشاء Application بدلاً من Updater
-    application = Application.builder().token(TOKEN).build()
-    
-    # إضافة handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
-    
-    # بدء البوت
-    application.run_polling()
+    updater = Updater(TOKEN, use_context=True)
+    dp = updater.dispatcher
+
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(MessageHandler(Filters.document.mime_type('text/html'), translate_html))
+
+    updater.start_polling()
+    updater.idle()
 
 if __name__ == '__main__':
     main()
