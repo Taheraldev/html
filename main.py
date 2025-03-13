@@ -11,18 +11,23 @@ logger = logging.getLogger(__name__)
 async def start(update: Update, context: CallbackContext):
     await update.message.reply_text("مرحباً! أرسل لي ملف PDF وسأقوم بتحويله إلى HTML.")
 
-def convert_pdf_to_html(pdf_path: str, html_path: str) -> bool:
+def convert_pdf_to_html(pdf_path: str, output_dir: str) -> str:
     """
-    تحويل PDF إلى HTML باستخدام `pdftohtml`.
-    يجب تثبيت `poppler-utils` على النظام.
+    تحويل PDF إلى HTML باستخدام `pdftohtml` من poppler-utils.
+    يتم حفظ المخرجات في مجلد معين لتجنب الفوضى.
     """
     try:
-        subprocess.run(['pdftohtml', '-c', '-noframes', pdf_path, html_path],
+        os.makedirs(output_dir, exist_ok=True)  # إنشاء مجلد الإخراج إذا لم يكن موجودًا
+        output_html_path = os.path.join(output_dir, os.path.basename(pdf_path).replace('.pdf', '.html'))
+        
+        # تشغيل pdftohtml مع تحسين التخطيط وإزالة الإطارات
+        subprocess.run(['pdftohtml', '-c', '-noframes', pdf_path, output_html_path],
                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-        return True
+
+        return output_html_path
     except subprocess.CalledProcessError as e:
         logger.error("❌ خطأ أثناء تحويل PDF إلى HTML: %s", e.stderr.decode('utf-8'))
-        return False
+        return None
 
 async def handle_pdf(update: Update, context: CallbackContext):
     document = update.message.document
@@ -33,23 +38,25 @@ async def handle_pdf(update: Update, context: CallbackContext):
         
         await update.message.reply_text("⏳ جاري تحويل ملف PDF إلى HTML، انتظر بعض الدقائق...")
 
-        original_pdf_path = document.file_name
-        html_path = original_pdf_path.replace('.pdf', '.html')
+        pdf_path = document.file_name
+        output_dir = "converted_files"
 
         new_file = await context.bot.get_file(document.file_id)
-        await new_file.download_to_drive(original_pdf_path)
-        logger.info("تم تحميل الملف: %s", original_pdf_path)
+        await new_file.download_to_drive(pdf_path)
+        logger.info("📥 تم تحميل الملف: %s", pdf_path)
 
-        if convert_pdf_to_html(original_pdf_path, html_path):
+        # تحويل PDF إلى HTML
+        html_path = convert_pdf_to_html(pdf_path, output_dir)
+        if html_path:
             with open(html_path, 'rb') as f:
                 await context.bot.send_document(chat_id=update.message.chat_id, document=f)
             await update.message.reply_text("✅ تم تحويل الملف إلى HTML بنجاح!")
         else:
             await update.message.reply_text("❌ حدث خطأ أثناء تحويل الملف.")
         
-        if os.path.exists(original_pdf_path):
-            os.remove(original_pdf_path)
-        if os.path.exists(html_path):
+        # تنظيف الملفات المؤقتة
+        os.remove(pdf_path)
+        if html_path and os.path.exists(html_path):
             os.remove(html_path)
     else:
         await update.message.reply_text("❌ يرجى إرسال ملف PDF فقط.")
