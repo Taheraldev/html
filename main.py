@@ -1,6 +1,6 @@
 import telegram
 from telegram.ext import Updater, CommandHandler, MessageHandler
-from telegram.ext import filters # تعديل سطر الاستيراد
+from telegram.ext import filters
 import logging
 import subprocess
 import os
@@ -28,18 +28,18 @@ def translate_html(update, context):
             translated_po_file = os.path.join(temp_dir, 'translated.po')
             translated_html_file = os.path.join(temp_dir, 'translated.html')
 
-            # استخراج النصوص إلى ملف PO
-            subprocess.run(['pofilter', '-i', file_path, '-x', 'html', '-o', po_file], check=True)
+        # استخراج النصوص إلى ملف PO
+        subprocess.run(['pofilter', '-i', file_path, '-x', 'html', '-o', po_file], check=True)
 
-            # ترجمة ملف PO باستخدام translate-toolkit (يمكنك استخدام خدمة ترجمة أخرى هنا)
-            subprocess.run(['translate', '-i', po_file, '-o', translated_po_file, '--target-language', 'en', '--source-language', 'ar', '--engine', 'google'], check=True)
+        # ترجمة ملف PO باستخدام translate-toolkit (يمكنك استخدام خدمة ترجمة أخرى هنا)
+        subprocess.run(['translate', '-i', po_file, '-o', translated_po_file, '--target-language', 'en', '--source-language', 'ar', '--engine', 'google'], check=True)
 
-            # دمج النصوص المترجمة في ملف HTML الأصلي
-            subprocess.run(['pomerge', '-i', translated_po_file, '-p', file_path, '-o', translated_html_file], check=True)
+        # دمج النصوص المترجمة في ملف HTML الأصلي
+        subprocess.run(['pomerge', '-i', translated_po_file, '-p', file_path, '-o', translated_html_file], check=True)
 
-            # إرسال الملف المترجم
-            with open(translated_html_file, 'rb') as f:
-                context.bot.send_document(chat_id=update.effective_chat.id, document=f, filename='translated.html')
+        # إرسال الملف المترجم
+        with open(translated_html_file, 'rb') as f:
+            context.bot.send_document(chat_id=update.effective_chat.id, document=f, filename='translated.html')
 
     except subprocess.CalledProcessError as e:
         logger.error(f"Error during translation: {e}")
@@ -49,11 +49,11 @@ def translate_html(update, context):
         update.message.reply_text(f'حدث خطأ: {e}')
 
 def main():
-    updater = Updater(TOKEN, use_context=True)
+    updater = Updater(TOKEN) # ازالة use_context=True
     dp = updater.dispatcher
 
     dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(filters.Document.mime_type('text/html'), translate_html)) # تعديل استخدام الفلاتر
+    dp.add_handler(MessageHandler(filters.Document.mime_type('text/html'), translate_html))
 
     while True:
         try:
