@@ -1,111 +1,81 @@
-from telegram import Update, InputFile
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from bs4 import BeautifulSoup
-import requests
-import io
+import os
+import subprocess
 import logging
+from telegram import Update
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 
-
-TELEGRAM_TOKEN = "6334414905:AAFK59exfc4HuQQJdxk-mwONn5K4yODCIJg"
-MYMEMORY_API_KEY = "7dfa552fac8aad334ae1"
-
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+# إعداد تسجيل الأخطاء
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-async def translate_text(text: str, source_lang: str = 'en', target_lang: str = 'ar') -> str:
-    url = "https://api.mymemory.translated.net/get"
-    params = {
-        'q': text,
-        'langpair': f"{source_lang}|{target_lang}",
-        'key': MYMEMORY_API_KEY
-    }
-    
-    try:
-        response = requests.get(url, params=params)
-        response.raise_for_status()
-        data = response.json()
-        
-        if data['responseStatus'] == 200:
-            return data['responseData']['translatedText']
-        else:
-            logger.error(f"Translation error: {data.get('responseDetails', 'Unknown error')}")
-            return text
-    except Exception as e:
-        logger.error(f"API request failed: {e}")
-        return text
+def start(update: Update, context: CallbackContext):
+    update.message.reply_text("مرحباً! أرسل لي ملف PDF وسأقوم بتحويله إلى HTML.")
 
-async def handle_html_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.message.from_user
-    document = update.message.document
-    
-    # التحقق من نوع الملف
-    if document.mime_type != "text/html" and not document.file_name.endswith('.html'):
-        await update.message.reply_text("⚠️ يرجى إرسال ملف HTML صحيح.")
-        return
-    
-    # التحقق من حجم الملف
-    max_size = 2 * 1024 * 1024  # 2MB
-    if document.file_size > max_size:
-        await update.message.reply_text("⚠️ حجم الملف يتجاوز الحد المسموح (2MB).")
-        return
-    
-    # إرسال رسالة الانتظار
-    processing_msg = await update.message.reply_text("⏳ تجري عملية الترجمة، الرجاء الانتظار...")
-    
+def convert_pdf_to_html(pdf_path: str, html_path: str) -> bool:
+    """
+    يستخدم الأمر pdftohtml لتحويل ملف PDF إلى HTML.
+    يُرجى التأكد من تثبيت poppler-utils على النظام.
+    """
     try:
-        # تنزيل الملف
-        file = await context.bot.get_file(document.file_id)
-        file_stream = io.BytesIO()
-        await file.download_to_memory(out=file_stream)
-        file_stream.seek(0)
-        html_content = file_stream.read().decode('utf-8')
-        
-        # معالجة وترجمة المحتوى
-        soup = BeautifulSoup(html_content, 'html.parser')
-        
-        for element in soup.find_all(string=True):
-            if element.parent.name in ['script', 'style', 'meta', 'noscript']:
-                continue
-            stripped_text = element.strip()
-            if stripped_text:
-                translated_text = await translate_text(stripped_text)
-                element.replace_with(translated_text)
-        
-        translated_html = str(soup)
-        
-        # إرسال الملف المترجم
-        output = io.BytesIO(translated_html.encode('utf-8'))
-        output.name = "translated_ar.html"
-        await update.message.reply_document(
-            document=InputFile(output),
-            caption="✅ تم الترجمة بنجاح!\nقم بإعادة توجيه هذا الملف للبوت الرئيسي لتحويله إلى PDF: @i2pdfbot \n@ta_ja199 للاستفسار"
+        # استخدام الخيارات -c للحفاظ على التخطيط، -noframes لإنتاج HTML بدون إطارات
+        result = subprocess.run(
+            ['pdftohtml', '-c', '-noframes', pdf_path, html_path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True
         )
-        
-    except Exception as e:
-        logger.error(f"Error processing file: {e}")
-        await update.message.reply_text("❌ حدث خطأ أثناء المعالجة. يرجى المحاولة لاحقًا.")
-        
-    finally:
-        # حذف رسالة الانتظار بعد الانتهاء
-        await context.bot.delete_message(chat_id=update.message.chat_id, message_id=processing_msg.message_id)
+        return True
+    except subprocess.CalledProcessError as e:
+        logger.error(f"حدث خطأ أثناء تحويل PDF إلى HTML: {e.stderr.decode('utf-8')}")
+        return False
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "مرحبًا! أرسل لي ملف HTML (بحد أقصى 2MB) وسأترجمه إلى العربية.\n"
-        "بوت تابع لـ @i2pdfbot \n"
-        "المطور: @ta_ja199"
-    )
+def handle_pdf(update: Update, context: CallbackContext):
+    document = update.message.document
+    if document and document.file_name.lower().endswith('.pdf'):
+        # التحقق من حجم الملف (مثلاً لا يتجاوز 2MB)
+        if document.file_size > 2 * 1024 * 1024:
+            update.message.reply_text("❌ حجم الملف أكبر من 2MB. يرجى إرسال ملف PDF بحجم أصغر.")
+            return
+
+        update.message.reply_text("جاري تحويل ملف PDF إلى HTML، انتظر بعض الدقائق...")
+        file_id = document.file_id
+        original_pdf_path = document.file_name
+        html_path = original_pdf_path.replace('.pdf', '.html')
+
+        # تحميل ملف الـ PDF
+        new_file = context.bot.get_file(file_id)
+        new_file.download(custom_path=original_pdf_path)
+        logger.info("تم تحميل الملف: %s", original_pdf_path)
+
+        # تحويل الـ PDF إلى HTML
+        if convert_pdf_to_html(original_pdf_path, html_path):
+            # إرسال ملف HTML للمستخدم
+            with open(html_path, 'rb') as f:
+                context.bot.send_document(chat_id=update.message.chat_id, document=f)
+            update.message.reply_text("✅ تم تحويل الملف إلى HTML بنجاح!")
+        else:
+            update.message.reply_text("❌ حدث خطأ أثناء تحويل الملف.")
+
+        # حذف الملفات المؤقتة
+        if os.path.exists(original_pdf_path):
+            os.remove(original_pdf_path)
+        if os.path.exists(html_path):
+            os.remove(html_path)
+    else:
+        update.message.reply_text("يرجى إرسال ملف PDF فقط.")
 
 def main():
-    application = Application.builder().token(TELEGRAM_TOKEN).build()
+    # ضع هنا توكن البوت الخاص بك
+    token = "YOUR_BOT_TOKEN"
     
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.Document.ALL, handle_html_file))
+    updater = Updater(token, use_context=True)
+    dp = updater.dispatcher
     
-    application.run_polling()
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(MessageHandler(Filters.document, handle_pdf))
+    
+    updater.start_polling()
+    updater.idle()
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
