@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 from googletrans import Translator
 
 # استبدل 'TOKEN' بالتوكن الخاص ببوتك
-TOKEN = "YOUR_BOT_TOKEN"
+TOKEN = "6016945663:AAGf2B4dpCo-nVFNXbyPUHuS9XwA1ugGa4Y"
 translator = Translator()
 
 def start(update: Update, context: CallbackContext):
