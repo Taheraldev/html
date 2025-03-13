@@ -10,6 +10,10 @@ RUN apt-get update && apt-get install -y \
     libffi-dev \
     libpoppler-cpp-dev \
     poppler-utils \
+    libjpeg-dev \
+    zlib1g-dev \
+    libtiff5-dev \
+    libfreetype6-dev \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
@@ -20,7 +24,7 @@ WORKDIR /app
 COPY . .
 
 # تحديث pip
-RUN pip install --upgrade pip
+RUN pip install --upgrade pip setuptools wheel
 
 # تثبيت المتطلبات من ملف requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
