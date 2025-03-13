@@ -7,10 +7,14 @@ WORKDIR /app
 # تثبيت المتطلبات الأساسية (Poppler-utils لتحويل PDF إلى HTML)
 RUN apt-get update && \
     apt-get install -y wget gnupg && \
-    # إضافة مستودع pdf2htmlEX
-    wget -qO - https://github.com/coolwanglu/pdf2htmlEX/releases/download/v0.18.8/pdf2htmlEX-0.18.8-linux-x86_64.tar.bz2 | tar -xj -C /usr/local/bin/ && \
+    # تنزيل ملف pdf2htmlEX
+    wget https://github.com/coolwanglu/pdf2htmlEX/releases/download/v0.18.8/pdf2htmlEX-0.18.8-linux-x86_64.tar.bz2 && \
+    # فك ضغط الملف
+    tar -xjvf pdf2htmlEX-0.18.8-linux-x86_64.tar.bz2 && \
+    # نقل الملف إلى /usr/local/bin/
+    mv pdf2htmlEX-0.18.8-linux-x86_64/pdf2htmlEX /usr/local/bin/ && \
     # تنظيف الحزم غير المستخدمة
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/* pdf2htmlEX-0.18.8-linux-x86_64.tar.bz2 pdf2htmlEX-0.18.8-linux-x86_64
 
 # نسخ ملفات المشروع إلى الحاوية
 COPY . /app
