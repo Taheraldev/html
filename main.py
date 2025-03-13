@@ -1,6 +1,6 @@
 import telegram
 from telegram.ext import Updater, CommandHandler, MessageHandler
-from telegram.ext.filters import Filters # تعديل سطر الاستيراد
+from telegram.ext import filters # تعديل سطر الاستيراد
 import logging
 import subprocess
 import os
@@ -53,7 +53,7 @@ def main():
     dp = updater.dispatcher
 
     dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(Filters.document.mime_type('text/html'), translate_html))
+    dp.add_handler(MessageHandler(filters.Document.mime_type('text/html'), translate_html)) # تعديل استخدام الفلاتر
 
     while True:
         try:
