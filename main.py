@@ -1,6 +1,12 @@
 import os
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from telegram.ext import (
+    Updater,
+    CommandHandler,
+    MessageHandler,
+    CallbackContext,
+    filters  # تم تغيير الاسم هنا
+)
 from bs4 import BeautifulSoup
 from googletrans import Translator
 
@@ -61,12 +67,15 @@ def handle_document(update: Update, context: CallbackContext):
         update.message.reply_text(f'حدث خطأ: {str(e)}')
 
 def main():
+    # إنشاء Updater
     updater = Updater(TOKEN)
     dp = updater.dispatcher
     
+    # إضافة handlers
     dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(Filters.document, handle_document))
+    dp.add_handler(MessageHandler(filters.Document.ALL, handle_document))  # تم التعديل هنا
     
+    # بدء البوت
     updater.start_polling()
     updater.idle()
 
