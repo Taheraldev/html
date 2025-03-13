@@ -13,7 +13,7 @@ RUN apt-get update && \
 COPY . /app
 
 # تثبيت المكتبات المطلوبة
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip3 install --no-cache-dir -r requirements.txt
 
 # تحديد الأمر لتشغيل البوت
-CMD ["python", "main.py"]
+CMD ["python3", "main.py"]
