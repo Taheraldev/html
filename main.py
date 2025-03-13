@@ -5,7 +5,7 @@ import requests
 import io
 import logging
 
-# إعدادات المفاتيح
+
 TELEGRAM_TOKEN = "6016945663:AAETwVMU3m27J5lcf7qKlc-90I26ABlY8wA"  # تم إضافة التوكن هنا
 MYMEMORY_API_KEY = "c9e7523ff7269bdbb2cc"   # مفتاح MyMemory API
 
