@@ -58,10 +58,9 @@ async def handle_html_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # تحليل HTML واستخراج النصوص
     soup = BeautifulSoup(html_content, 'html.parser')
-    text_nodes = soup.find_all(text=True)
     
-    # ترجمة النصوص (تجاهل النصوص داخل <script> و <style>)
-    for element in text_nodes:
+    # تجميع النصوص المتجاورة وترجمتها معًا
+    for element in soup.find_all(string=True):
         if element.parent.name in ['script', 'style', 'meta', 'noscript']:
             continue
         stripped_text = element.strip()
