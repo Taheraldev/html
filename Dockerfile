@@ -4,6 +4,7 @@ FROM python:3.10-slim
 # تثبيت الأدوات المطلوبة، بما في ذلك pdftohtml
 RUN apt-get update && apt-get install -y \
     poppler-utils \
+    wkhtmltopdf \
     && rm -rf /var/lib/apt/lists/*
 
 # تحديد مجلد العمل
