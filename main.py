@@ -1,14 +1,13 @@
 import os
 import subprocess
 import logging
-from telegram import Update, InputFile, InlineKeyboardButton, InlineKeyboardMarkup, ParseMode
+import datetime
+import json
+from telegram import Update, InputFile, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 from bs4 import BeautifulSoup
 from googletrans import Translator
-from datetime import datetime
-import json
-import time
-from PyPDF2 import PdfFileReader
+import PyPDF2
 
 # إعداد تسجيل الأخطاء
 logging.basicConfig(
@@ -17,41 +16,62 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# إنشاء مثيل للمترجم
+# إعداد المترجم
 translator = Translator()
 
-# جلب متغيرات البيئة (تأكد من تعديل BOT_TOKEN إلى توكن البوت الخاص بك)
+# متغيرات البيئة
 ADMIN_ID = os.getenv("ADMIN_ID", "5198110160")
 BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
+
+# ملف بيانات المستخدمين لتخزين المستخدمين الذين ضغطوا /start
 USER_FILE = "user_data.json"
 
-# تحميل بيانات المستخدمين من ملف أو إنشاء ملف جديد إذا لم يكن موجود
-def load_user_data():
+# متغير لتتبع عدد الملفات لكل مستخدم في اليوم (الحد الأقصى 5 ملفات)
+user_file_count = {}
+
+def load_user_data() -> set:
+    """تحميل بيانات المستخدمين من ملف JSON وإرجاعها كمجموعة."""
     if os.path.exists(USER_FILE):
-        with open(USER_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    return {}
+        try:
+            with open(USER_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return set(data) if isinstance(data, list) else set()
+        except Exception as e:
+            logger.error("❌ خطأ أثناء تحميل بيانات المستخدمين: %s", e)
+            return set()
+    return set()
 
-def save_user_data(data):
-    with open(USER_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
-
-# جلب البيانات الخاصة بالمستخدمين
-user_data = load_user_data()
+def save_user_data(users: set):
+    """حفظ بيانات المستخدمين في ملف JSON."""
+    try:
+        with open(USER_FILE, "w", encoding="utf-8") as f:
+            json.dump(list(users), f)
+    except Exception as e:
+        logger.error("❌ خطأ أثناء حفظ بيانات المستخدمين: %s", e)
 
 def start(update: Update, context: CallbackContext):
-    """رسالة الترحيب عند بدء البوت."""
+    """رسالة الترحيب عند بدء البوت وإرسال إشعار للمشرف للمستخدم الجديد فقط."""
     user = update.message.from_user
-    user_id = str(user.id)
+    start_message = (
+        "مرحبا انا بوت اقوم بترجمة ملفات pdf \n"
+        "البوت تابع ل: @i2pdfbot \n"
+        "ملاحضه البوت تجريبي فقط سوف يتم تطويره قريبا \n"
+        "@ta_ja199 لاستفسار"
+    )
     
-    # إرسال رسالة في المرة الأولى فقط
-    if user_id not in user_data:
-        user_data[user_id] = {
-            "used_today": 0,
-            "last_used": str(datetime.now().date())
-        }
-        save_user_data(user_data)
-        
+    # إعداد الأزرار المدمجة
+    keyboard = [
+        [InlineKeyboardButton("قناة البوت", url="https://t.me/i2pdfbotchannel")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    update.message.reply_text(start_message, reply_markup=reply_markup)
+    
+    # تحميل بيانات المستخدمين من الملف
+    known_users = load_user_data()
+    # إرسال إشعار للمشرف فقط إذا كان المستخدم جديداً
+    if user.id not in known_users:
+        known_users.add(user.id)
+        save_user_data(known_users)
         admin_message = (
             f"📢 مستخدم جديد:\n"
             f"🔹 معرف: {user.id}\n"
@@ -59,59 +79,14 @@ def start(update: Update, context: CallbackContext):
             f"🔹 اسم المستخدم: @{user.username if user.username else 'غير متوفر'}"
         )
         context.bot.send_message(chat_id=ADMIN_ID, text=admin_message)
-        
-    # إضافة زر في رسالة الترحيب
-    welcome_message = (
-        "مرحبا انا بوت اقوم بترجمة ملفات pdf \n"
-        "البوت تابع ل: @i2pdfbot \n"
-        "ملاحضة البوت تجريبي فقط وسوف يتم تطويره قريبا \n"
-        "@ta_ja199 لاستفسار"
-    )
-    
-    keyboard = [
-        [InlineKeyboardButton("قناة البوت", url="https://t.me/i2pdfbotchannel")]
-    ]
-    
-    update.message.reply_text(welcome_message, reply_markup=InlineKeyboardMarkup(keyboard))
 
-def send_progress(update: Update, context: CallbackContext, message_id: int, progress: int):
-    """إرسال تحديث للمستخدم حول نسبة التقدم في التحويل."""
-    progress_bar = "◾️" * (progress // 10) + "◽️" * (10 - progress // 10)
-    context.bot.edit_message_text(
-        text=f"⏳ جاري تحويل وترجمة الملف، يرجى الانتظار...\n{progress_bar} {progress}%",
-        chat_id=update.message.chat_id,
-        message_id=message_id,
-        parse_mode=ParseMode.MARKDOWN
-    )
-
-def get_pdf_page_count(pdf_path: str) -> int:
-    """إرجاع عدد الصفحات في ملف PDF."""
-    try:
-        with open(pdf_path, 'rb') as f:
-            reader = PdfFileReader(f)
-            return reader.getNumPages()
-    except Exception as e:
-        logger.error("❌ خطأ أثناء قراءة عدد الصفحات: %s", e)
-        return 0
-
-def convert_pdf_to_html(pdf_path: str, output_dir: str, update: Update, context: CallbackContext, message_id: int) -> str:
+def convert_pdf_to_html(pdf_path: str, output_dir: str) -> str:
     """تحويل ملف PDF إلى HTML باستخدام pdftohtml."""
     try:
         os.makedirs(output_dir, exist_ok=True)
         output_html = os.path.join(output_dir, os.path.basename(pdf_path).replace('.pdf', '.html'))
-        
-        total_pages = get_pdf_page_count(pdf_path)
-        if total_pages > 5:
-            update.message.reply_text("❌ الحد الأقصى لعدد الصفحات هو 5 صفحات. يرجى إرسال ملف PDF يحتوي على 5 صفحات أو أقل.")
-            return None
-        
         subprocess.run(['pdftohtml', '-c', '-noframes', pdf_path, output_html],
                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-        
-        # إرسال تحديث نسبة التحميل أثناء التحويل
-        for progress in range(0, 101, 10):
-            send_progress(update, context, message_id, progress)
-            time.sleep(1)  # لتجربة التقدم الفعلي
         return output_html
     except subprocess.CalledProcessError as e:
         error_message = e.stderr.decode('utf-8') if e.stderr is not None else str(e)
@@ -131,6 +106,7 @@ def translate_html(file_path: str) -> str:
                 element.replace_with(translation)
             except Exception as e:
                 logger.error("❌ خطأ أثناء الترجمة: %s", e)
+    # إنشاء ملف HTML مترجم جديد مع لاحقة _translated
     translated_path = file_path.replace('.html', '_translated.html')
     with open(translated_path, 'w', encoding='utf-8') as f:
         f.write(str(soup))
@@ -148,70 +124,134 @@ def convert_html_to_pdf(html_path: str) -> str:
         return None
 
 def handle_pdf(update: Update, context: CallbackContext):
-    """معالجة ملف PDF المرسل من المستخدم."""
-    user = update.message.from_user
-    user_id = str(user.id)
-    today_date = str(datetime.now().date())
-    
-    # تحقق من عدد الملفات المرسلة في اليوم
-    if user_data[user_id]["last_used"] != today_date:
-        user_data[user_id]["used_today"] = 0
-        user_data[user_id]["last_used"] = today_date
-    
-    if user_data[user_id]["used_today"] >= 5:
-        update.message.reply_text("❌ الحد الأقصى لعدد الملفات المرسلة في اليوم هو 5 ملفات فقط.")
+    """معالجة ملف PDF المرسل من المستخدم مع تحديث نسبة التقدم وإدخال القيود المطلوبة."""
+    # منع إرسال أكثر من ملف في دفعة واحدة
+    if update.message.media_group_id is not None:
+        update.message.reply_text("❌ الرجاء إرسال ملف واحد فقط في كل مرة.")
         return
 
     document = update.message.document
     if document and document.file_name.lower().endswith('.pdf'):
-        # التحقق من إرسال أكثر من ملف في نفس الرسالة
-        if len(update.message.document) > 1:
-            update.message.reply_text("❌ يمكنك إرسال ملف واحد فقط في المرة.")
-            return
-        
         if document.file_size > 1 * 1024 * 1024:
             update.message.reply_text("❌ حجم الملف أكبر من 1MB. يرجى إرسال ملف PDF أصغر.")
             return
-        # إرسال رسالة التحميل الأولية
-        progress_message = update.message.reply_text("⏳ جاري ترجمة الملف، يرجى الانتظار...")
 
+        # إرسال رسالة البداية مع نسبة التقدم (0%)
+        progress_message = update.message.reply_text("⏳ جاري تحويل وترجمة الملف، يرجى الانتظار... (0%)")
+
+        # التحقق من عدد الملفات المرسلة لهذا المستخدم اليوم (الحد الأقصى 5 ملفات)
+        user_id = update.message.from_user.id
+        today = datetime.date.today()
+        if user_id in user_file_count:
+            if user_file_count[user_id]['date'] != today:
+                user_file_count[user_id]['date'] = today
+                user_file_count[user_id]['count'] = 0
+        else:
+            user_file_count[user_id] = {'date': today, 'count': 0}
+        
+        if user_file_count[user_id]['count'] >= 5:
+            context.bot.edit_message_text(
+                chat_id=update.effective_chat.id,
+                message_id=progress_message.message_id,
+                text="❌ لقد تجاوزت الحد الأقصى لعدد الملفات (5 ملفات) لهذا اليوم."
+            )
+            return
+
+        # تحميل الملف
         pdf_path = document.file_name
         output_dir = "converted_files"
-        
-        # تحميل الملف
         new_file = context.bot.get_file(document.file_id)
         new_file.download(custom_path=pdf_path)
         logger.info("📥 تم تحميل الملف: %s", pdf_path)
-        
-        # تحويل PDF إلى HTML
-        html_path = convert_pdf_to_html(pdf_path, output_dir, update, context, progress_message.message_id)
-        if not html_path:
-            update.message.reply_text("❌ حدث خطأ أثناء تحويل الملف.")
+        context.bot.edit_message_text(
+            chat_id=update.effective_chat.id,
+            message_id=progress_message.message_id,
+            text="⏳ جاري تحويل وترجمة الملف، يرجى الانتظار... (20%)"
+        )
+
+        # التحقق من عدد صفحات ملف PDF (الحد الأقصى 5 صفحات)
+        try:
+            with open(pdf_path, "rb") as pdf_file:
+                reader = PyPDF2.PdfReader(pdf_file)
+                num_pages = len(reader.pages)
+            if num_pages > 5:
+                context.bot.edit_message_text(
+                    chat_id=update.effective_chat.id,
+                    message_id=progress_message.message_id,
+                    text="❌ الحد الأقصى هو 5 صفحات بسبب التحميل الزائد."
+                )
+                if os.path.exists(pdf_path):
+                    os.remove(pdf_path)
+                return
+        except Exception as e:
+            logger.error("❌ خطأ أثناء قراءة ملف PDF: %s", e)
+            context.bot.edit_message_text(
+                chat_id=update.effective_chat.id,
+                message_id=progress_message.message_id,
+                text="❌ حدث خطأ أثناء قراءة ملف PDF."
+            )
+            if os.path.exists(pdf_path):
+                os.remove(pdf_path)
             return
-        
-        # ترجمة HTML
+
+        # تحويل PDF إلى HTML
+        html_path = convert_pdf_to_html(pdf_path, output_dir)
+        if not html_path:
+            context.bot.edit_message_text(
+                chat_id=update.effective_chat.id,
+                message_id=progress_message.message_id,
+                text="❌ حدث خطأ أثناء تحويل الملف إلى HTML."
+            )
+            if os.path.exists(pdf_path):
+                os.remove(pdf_path)
+            return
+
+        context.bot.edit_message_text(
+            chat_id=update.effective_chat.id,
+            message_id=progress_message.message_id,
+            text="⏳ جاري تحويل وترجمة الملف، يرجى الانتظار... (40%)"
+        )
+
+        # ترجمة HTML (يُنشأ ملف مترجم مع لاحقة _translated)
         translated_html = translate_html(html_path)
-        
+        context.bot.edit_message_text(
+            chat_id=update.effective_chat.id,
+            message_id=progress_message.message_id,
+            text="⏳ جاري تحويل وترجمة الملف، يرجى الانتظار... (60%)"
+        )
+
         # تحويل HTML المترجم إلى PDF
         translated_pdf = convert_html_to_pdf(translated_html)
-        
-        if translated_pdf:
-            with open(translated_pdf, 'rb') as p_file:
-                context.bot.send_document(
-                    chat_id=update.message.chat_id, 
-                    document=InputFile(p_file),
-                    caption="✅ تم تحويل وترجمة الملف بنجاح!",
-                    reply_markup=InlineKeyboardMarkup([ 
-                        [InlineKeyboardButton("تعديل على PDF", url="https://t.me/i2pdfbot")]
-                    ])
-                )
-            
-            # تحديث عدد الملفات المرسلة
-            user_data[user_id]["used_today"] += 1
-            save_user_data(user_data)
-        else:
-            update.message.reply_text("❌ حدث خطأ أثناء تحويل HTML إلى PDF.")
-        
+        if not translated_pdf:
+            context.bot.edit_message_text(
+                chat_id=update.effective_chat.id,
+                message_id=progress_message.message_id,
+                text="❌ حدث خطأ أثناء تحويل HTML إلى PDF."
+            )
+            return
+
+        context.bot.edit_message_text(
+            chat_id=update.effective_chat.id,
+            message_id=progress_message.message_id,
+            text="⏳ جاري تحويل وترجمة الملف، يرجى الانتظار... (80%)"
+        )
+
+        # زيادة عدد الملفات المرسلة لهذا المستخدم
+        user_file_count[user_id]['count'] += 1
+
+        # إرسال ملف PDF النهائي فقط (حذف ملف HTML)
+        with open(translated_pdf, 'rb') as p_file:
+            context.bot.send_document(
+                chat_id=update.effective_chat.id, 
+                document=InputFile(p_file),
+                caption="✅ تم تحويل وترجمة الملف بنجاح!"
+            )
+        context.bot.edit_message_text(
+            chat_id=update.effective_chat.id,
+            message_id=progress_message.message_id,
+            text="✅ تم تحويل وترجمة الملف بنجاح! (100%)"
+        )
+
         # تنظيف الملفات المؤقتة
         for path in [pdf_path, html_path, translated_html, translated_pdf]:
             try:
