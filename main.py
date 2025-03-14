@@ -27,10 +27,10 @@ async def start(update: Update, context: CallbackContext):
     )
     # إشعار المشرف عند دخول مستخدم جديد
     admin_message = (
-        f"📢 مستخدم جديد:\n"
-        f"🔹 معرف: {user.id}\n"
-        f"🔹 الاسم: {user.first_name} {user.last_name or ''}\n"
-        f"🔹 اسم المستخدم: @{user.username or 'غير متوفر'}"
+        f" مستخدم جديد:\n"
+        f" معرف: {user.id}\n"
+        f" الاسم: {user.first_name} {user.last_name or ''}\n"
+        f" اسم المستخدم: @{user.username or 'غير متوفر'}"
     )
     await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message)
 
@@ -95,7 +95,7 @@ async def handle_pdf(update: Update, context: CallbackContext):
         # تحميل الملف
         new_file = await context.bot.get_file(document.file_id)
         await new_file.download_to_drive(pdf_path)
-        logger.info("📥 تم تحميل الملف: %s", pdf_path)
+        logger.info(" تم تحميل الملف: %s", pdf_path)
 
         # تحويل PDF إلى HTML
         html_path = convert_pdf_to_html(pdf_path, output_dir)
