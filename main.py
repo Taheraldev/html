@@ -66,7 +66,7 @@ def start(update: Update, context: CallbackContext):
     start_message = (
         "مرحبا انا بوت اقوم بترجمة ملفات pdf \n"
         "البوت تابع ل: @i2pdfbot \n"
-        "ملاحضه البوت تجريبي فقط سوف يتم تطويره قريبا \n"
+        "😇 ملاحضه البوت تجريبي فقط سوف يتم تطويره قريبا \n"
         "@ta_ja199 لاستفسار"
     )
     
@@ -144,7 +144,7 @@ def handle_pdf(update: Update, context: CallbackContext):
     document = update.message.document
     if document and document.file_name.lower().endswith('.pdf'):
         if document.file_size > 1 * 1024 * 1024:
-            update.message.reply_text("❌ حجم الملف أكبر من 1MB. يرجى إرسال ملف PDF أصغر.\n قسم بضغط ملف في البوت هذا :@i2pdfbot")
+            update.message.reply_text("❌ حجم الملف أكبر من 1MB. يرجى إرسال ملف PDF أصغر.\n قسم بضغط ملف في البوت هذا :@i2pdfbot\n ثم قم بارسال ملف لكي اترجمة")
             return
 
         # إرسال رسالة البداية مع نسبة التقدم (0%)
@@ -192,7 +192,7 @@ def handle_pdf(update: Update, context: CallbackContext):
                 context.bot.edit_message_text(
                     chat_id=update.effective_chat.id,
                     message_id=progress_message.message_id,
-                    text="❌ الحد الأقصى هو 5 صفحات بسبب التحميل الزائد.\n قسم بتقسيم ملف في البوت هذا :@i2pdfbot"
+                    text="❌ الحد الأقصى هو 5 صفحات بسبب التحميل الزائد.\n قسم بتقسيم ملف في البوت هذا :@i2pdfbot\n ثم قم بارسال ملف لكي اترجمة"
                 )
                 if os.path.exists(pdf_path):
                     os.remove(pdf_path)
@@ -267,7 +267,7 @@ def handle_pdf(update: Update, context: CallbackContext):
             context.bot.send_document(
                 chat_id=update.effective_chat.id,
                 document=InputFile(p_file),
-                caption="✅ تم تحويل وترجمة الملف بنجاح!",
+                caption="✅ تم ترجمة الملف بنجاح!",
                 reply_markup=reply_markup
             )
         percentage = 100
