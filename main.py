@@ -2,7 +2,7 @@ import os
 import subprocess
 import logging
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackContext, filters
 from bs4 import BeautifulSoup
 from googletrans import Translator
 
@@ -17,7 +17,7 @@ translator = Translator()
 ADMIN_ID = os.getenv("ADMIN_ID", "5198110160")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(update: Update, context: CallbackContext):
     """استجابة عند بدء تشغيل البوت."""
     user = update.message.from_user
     await update.message.reply_text("مرحباً! أرسل لي ملف PDF وسأقوم بتحويله إلى HTML مترجم ثم إلى PDF.")
@@ -71,7 +71,7 @@ def convert_html_to_pdf(html_path: str) -> str:
         logger.error("❌ خطأ أثناء تحويل HTML إلى PDF: %s", e.stderr.decode('utf-8'))
         return None
 
-async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_pdf(update: Update, context: CallbackContext):
     """معالجة ملفات PDF المرسلة من المستخدم."""
     document = update.message.document
     if document and document.file_name.lower().endswith('.pdf'):
@@ -121,7 +121,7 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     """إعداد وتشغيل البوت."""
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app = Application.builder().token(BOT_TOKEN).build()  # تم تصحيحه
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.Document.PDF, handle_pdf))
