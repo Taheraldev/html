@@ -15,6 +15,7 @@ translator = Translator()
 
 # معرف المشرف لاستقبال إشعارات عند دخول مستخدم جديد
 ADMIN_ID = os.getenv("ADMIN_ID", "5198110160")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 async def start(update: Update, context: CallbackContext):
     user = update.message.from_user
@@ -25,14 +26,11 @@ async def start(update: Update, context: CallbackContext):
     await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message)
 
 def convert_pdf_to_html(pdf_path: str, output_dir: str) -> str:
-    """
-    تحويل PDF إلى HTML باستخدام `pdftohtml` من poppler-utils.
-    """
+    """تحويل PDF إلى HTML باستخدام `pdftohtml` من poppler-utils."""
     try:
         os.makedirs(output_dir, exist_ok=True)
         output_html_path = os.path.join(output_dir, os.path.basename(pdf_path).replace('.pdf', '.html'))
         
-        # تشغيل pdftohtml مع تحسين التخطيط وإزالة الإطارات
         subprocess.run(['pdftohtml', '-c', '-noframes', pdf_path, output_html_path],
                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
 
@@ -42,9 +40,7 @@ def convert_pdf_to_html(pdf_path: str, output_dir: str) -> str:
         return None
 
 def translate_html(file_path: str) -> str:
-    """
-    ترجمة محتوى HTML من الإنجليزية إلى العربية.
-    """
+    """ترجمة محتوى HTML من الإنجليزية إلى العربية."""
     with open(file_path, 'r', encoding='utf-8') as f:
         html = f.read()
     soup = BeautifulSoup(html, 'html.parser')
@@ -65,9 +61,7 @@ def translate_html(file_path: str) -> str:
     return translated_html_path
 
 def convert_html_to_pdf(html_path: str) -> str:
-    """
-    تحويل ملف HTML إلى PDF باستخدام `wkhtmltopdf`.
-    """
+    """تحويل ملف HTML إلى PDF باستخدام `wkhtmltopdf`."""
     pdf_path = html_path.replace(".html", ".pdf")
     try:
         subprocess.run(['wkhtmltopdf', html_path, pdf_path], check=True)
@@ -123,9 +117,8 @@ async def handle_pdf(update: Update, context: CallbackContext):
         await update.message.reply_text("❌ يرجى إرسال ملف PDF فقط.")
 
 def main():
-    token = os.getenv("BOT_TOKEN")
-
-    app = Application.builder().token(token).build()
+    """إعداد البوت وتشغيله."""
+    app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.Document.PDF, handle_pdf))
