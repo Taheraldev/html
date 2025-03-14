@@ -2,12 +2,14 @@ import os
 import subprocess
 import logging
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackContext, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackContext, filters
 from bs4 import BeautifulSoup
 from googletrans import Translator
 
 # إعداد تسجيل الأخطاء
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
+)
 logger = logging.getLogger(__name__)
 
 # إنشاء مثيل للمترجم
@@ -20,8 +22,9 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 async def start(update: Update, context: CallbackContext):
     """استجابة عند بدء تشغيل البوت."""
     user = update.message.from_user
-    await update.message.reply_text("مرحباً! أرسل لي ملف PDF وسأقوم بتحويله إلى HTML مترجم ثم إلى PDF.")
-
+    await update.message.reply_text(
+        "مرحباً! أرسل لي ملف PDF وسأقوم بتحويله إلى HTML مترجم ثم إلى PDF."
+    )
     # إشعار المشرف عند دخول مستخدم جديد
     admin_message = (
         f"📢 مستخدم جديد:\n"
@@ -35,9 +38,15 @@ def convert_pdf_to_html(pdf_path: str, output_dir: str) -> str:
     """تحويل PDF إلى HTML باستخدام pdftohtml."""
     try:
         os.makedirs(output_dir, exist_ok=True)
-        output_html_path = os.path.join(output_dir, os.path.basename(pdf_path).replace('.pdf', '.html'))
-        subprocess.run(['pdftohtml', '-c', '-noframes', pdf_path, output_html_path],
-                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        output_html_path = os.path.join(
+            output_dir, os.path.basename(pdf_path).replace('.pdf', '.html')
+        )
+        subprocess.run(
+            ['pdftohtml', '-c', '-noframes', pdf_path, output_html_path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True
+        )
         return output_html_path
     except subprocess.CalledProcessError as e:
         logger.error("❌ خطأ أثناء تحويل PDF إلى HTML: %s", e.stderr.decode('utf-8'))
@@ -98,8 +107,16 @@ async def handle_pdf(update: Update, context: CallbackContext):
             if translated_pdf_path:
                 # إرسال الملفات للمستخدم
                 with open(translated_html_path, 'rb') as html_file, open(translated_pdf_path, 'rb') as pdf_file:
-                    await context.bot.send_document(chat_id=update.message.chat_id, document=html_file, caption="✅ ملف HTML المترجم")
-                    await context.bot.send_document(chat_id=update.message.chat_id, document=pdf_file, caption="✅ ملف PDF المترجم")
+                    await context.bot.send_document(
+                        chat_id=update.message.chat_id,
+                        document=html_file,
+                        caption="✅ ملف HTML المترجم"
+                    )
+                    await context.bot.send_document(
+                        chat_id=update.message.chat_id,
+                        document=pdf_file,
+                        caption="✅ ملف PDF المترجم"
+                    )
                 await update.message.reply_text("✅ تم تحويل وترجمة الملف بنجاح!")
             else:
                 await update.message.reply_text("❌ حدث خطأ أثناء تحويل HTML إلى PDF.")
@@ -117,7 +134,8 @@ async def handle_pdf(update: Update, context: CallbackContext):
 
 def main():
     """إعداد وتشغيل البوت."""
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    # استخدم Application.builder() لبناء التطبيق
+    app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.Document.PDF, handle_pdf))
     app.run_polling()
