@@ -2,7 +2,7 @@ import os
 import subprocess
 import logging
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackContext, filters
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackContext, filters
 from bs4 import BeautifulSoup
 from googletrans import Translator
 
@@ -121,7 +121,7 @@ async def handle_pdf(update: Update, context: CallbackContext):
 
 def main():
     """إعداد وتشغيل البوت."""
-    app = Application.builder().token(BOT_TOKEN).build()
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.Document.PDF, handle_pdf))
