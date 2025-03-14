@@ -2,7 +2,7 @@ import os
 import subprocess
 import logging
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, CallbackContext, Filters
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackContext, filters
 from bs4 import BeautifulSoup
 from googletrans import Translator
 
@@ -16,13 +16,13 @@ translator = Translator()
 # معرف المشرف لاستقبال إشعارات عند دخول مستخدم جديد
 ADMIN_ID = os.getenv("ADMIN_ID", "5198110160")
 
-def start(update: Update, context: CallbackContext):
+async def start(update: Update, context: CallbackContext):
     user = update.message.from_user
-    update.message.reply_text("مرحباً! أرسل لي ملف PDF وسأقوم بتحويله إلى HTML مترجم.")
+    await update.message.reply_text("مرحباً! أرسل لي ملف PDF وسأقوم بتحويله إلى HTML مترجم ثم إلى PDF.")
     
     # إرسال إشعار للمشرف عند دخول المستخدم
     admin_message = f"📢 دخل المستخدم:\nمعرف المستخدم: {user.id}\nالاسم: {user.first_name} {user.last_name if user.last_name else ''}\nاسم المستخدم: @{user.username if user.username else 'غير متوفر'}"
-    context.bot.send_message(chat_id=ADMIN_ID, text=admin_message)
+    await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message)
 
 def convert_pdf_to_html(pdf_path: str, output_dir: str) -> str:
     """
@@ -64,20 +64,32 @@ def translate_html(file_path: str) -> str:
     
     return translated_html_path
 
-def handle_pdf(update: Update, context: CallbackContext):
+def convert_html_to_pdf(html_path: str) -> str:
+    """
+    تحويل ملف HTML إلى PDF باستخدام `wkhtmltopdf`.
+    """
+    pdf_path = html_path.replace(".html", ".pdf")
+    try:
+        subprocess.run(['wkhtmltopdf', html_path, pdf_path], check=True)
+        return pdf_path
+    except subprocess.CalledProcessError as e:
+        logger.error("❌ خطأ أثناء تحويل HTML إلى PDF: %s", e.stderr.decode('utf-8'))
+        return None
+
+async def handle_pdf(update: Update, context: CallbackContext):
     document = update.message.document
     if document and document.file_name.lower().endswith('.pdf'):
         if document.file_size > 2 * 1024 * 1024:
-            update.message.reply_text("❌ حجم الملف أكبر من 2MB. يرجى إرسال ملف PDF أصغر.")
+            await update.message.reply_text("❌ حجم الملف أكبر من 2MB. يرجى إرسال ملف PDF أصغر.")
             return
         
-        update.message.reply_text("⏳ جاري تحويل ملف PDF إلى HTML وترجمته، انتظر بعض الدقائق...")
+        await update.message.reply_text("⏳ جاري تحويل ملف PDF إلى HTML وترجمته، انتظر بعض الدقائق...")
 
         pdf_path = document.file_name
         output_dir = "converted_files"
 
-        new_file = context.bot.get_file(document.file_id)
-        new_file.download(pdf_path)
+        new_file = await context.bot.get_file(document.file_id)
+        await new_file.download_to_drive(pdf_path)
         logger.info("📥 تم تحميل الملف: %s", pdf_path)
 
         # تحويل PDF إلى HTML
@@ -85,34 +97,40 @@ def handle_pdf(update: Update, context: CallbackContext):
         if html_path:
             # ترجمة HTML
             translated_html_path = translate_html(html_path)
-            with open(translated_html_path, 'rb') as f:
-                context.bot.send_document(
-                    chat_id=update.message.chat_id,
-                    document=f,
-                    caption="✅ تم تحويل وترجمة الملف بنجاح!\nقم بإعادة توجيه هذا الملف للبوت الرئيسي لتحويله إلى PDF: @i2pdfbot \n@ta_ja199 للاستفسار"
-                )
-            update.message.reply_text("✅ تم تحويل الملف إلى HTML مترجم بنجاح!")
+
+            # تحويل HTML إلى PDF
+            translated_pdf_path = convert_html_to_pdf(translated_html_path)
+
+            if translated_pdf_path:
+                # إرسال الملفات للمستخدم
+                with open(translated_html_path, 'rb') as html_file, open(translated_pdf_path, 'rb') as pdf_file:
+                    await context.bot.send_document(chat_id=update.message.chat_id, document=html_file, caption="✅ ملف HTML المترجم")
+                    await context.bot.send_document(chat_id=update.message.chat_id, document=pdf_file, caption="✅ ملف PDF المترجم")
+
+                await update.message.reply_text("✅ تم تحويل وترجمة الملف بنجاح!")
+            else:
+                await update.message.reply_text("❌ حدث خطأ أثناء تحويل HTML إلى PDF.")
         else:
-            update.message.reply_text("❌ حدث خطأ أثناء تحويل الملف.")
-        
+            await update.message.reply_text("❌ حدث خطأ أثناء تحويل الملف.")
+
         # تنظيف الملفات المؤقتة
         os.remove(pdf_path)
         os.remove(html_path)
         os.remove(translated_html_path)
+        if translated_pdf_path:
+            os.remove(translated_pdf_path)
     else:
-        update.message.reply_text("❌ يرجى إرسال ملف PDF فقط.")
+        await update.message.reply_text("❌ يرجى إرسال ملف PDF فقط.")
 
 def main():
     token = os.getenv("BOT_TOKEN")
 
-    updater = Updater(token, use_context=True)
-    dispatcher = updater.dispatcher
+    app = Application.builder().token(token).build()
 
-    dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(MessageHandler(Filters.document.pdf, handle_pdf))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.Document.PDF, handle_pdf))
 
-    updater.start_polling()
-    updater.idle()
+    app.run_polling()
 
 if __name__ == '__main__':
     main()
