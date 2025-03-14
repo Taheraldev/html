@@ -11,7 +11,7 @@ import PyPDF2
 
 # إعداد تسجيل الأخطاء
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
@@ -28,6 +28,17 @@ USER_FILE = "user_data.json"
 
 # متغير لتتبع عدد الملفات لكل مستخدم في اليوم (الحد الأقصى 5 ملفات)
 user_file_count = {}
+
+def get_progress_bar(percentage: int) -> str:
+    """
+    دالة تقوم بإنشاء شريط تقدم باستخدام مربعات.
+    العدد الكلي للمربعات هو 5:
+      - المربع الممتلئ: ◼️
+      - المربع الفارغ: ◻️
+    """
+    total_blocks = 5
+    filled_blocks = int(percentage / 20)
+    return "".join(["◼️" for _ in range(filled_blocks)] + ["◻️" for _ in range(total_blocks - filled_blocks)])
 
 def load_user_data() -> set:
     """تحميل بيانات المستخدمين من ملف JSON وإرجاعها كمجموعة."""
@@ -61,7 +72,7 @@ def start(update: Update, context: CallbackContext):
     
     # إعداد الأزرار المدمجة
     keyboard = [
-        [InlineKeyboardButton("قناة البوت", url="https://t.me/i2pdfbotchannel")]
+        [InlineKeyboardButton("قناة البوت 🔫", url="https://t.me/i2pdfbotchannel")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     update.message.reply_text(start_message, reply_markup=reply_markup)
@@ -127,17 +138,19 @@ def handle_pdf(update: Update, context: CallbackContext):
     """معالجة ملف PDF المرسل من المستخدم مع تحديث نسبة التقدم وإدخال القيود المطلوبة."""
     # منع إرسال أكثر من ملف في دفعة واحدة
     if update.message.media_group_id is not None:
-        update.message.reply_text("❌ الرجاء إرسال ملف واحد فقط في كل مرة.")
+        update.message.reply_text("❌ الرجاء إرسال ملف واحد فقط في كل مرة.\n الا وسف يتم حظرك😂")
         return
 
     document = update.message.document
     if document and document.file_name.lower().endswith('.pdf'):
         if document.file_size > 1 * 1024 * 1024:
-            update.message.reply_text("❌ حجم الملف أكبر من 1MB. يرجى إرسال ملف PDF أصغر.")
+            update.message.reply_text("❌ حجم الملف أكبر من 1MB. يرجى إرسال ملف PDF أصغر.\n قسم بضغط ملف في البوت هذا :@i2pdfbot")
             return
 
         # إرسال رسالة البداية مع نسبة التقدم (0%)
-        progress_message = update.message.reply_text("⏳ جاري تحويل وترجمة الملف، يرجى الانتظار... (0%)")
+        percentage = 0
+        progress_text = f"⏳ جاري ترجمة الملف، يرجى الانتظار... ({percentage}%)\n{get_progress_bar(percentage)}"
+        progress_message = update.message.reply_text(progress_text)
 
         # التحقق من عدد الملفات المرسلة لهذا المستخدم اليوم (الحد الأقصى 5 ملفات)
         user_id = update.message.from_user.id
@@ -153,7 +166,7 @@ def handle_pdf(update: Update, context: CallbackContext):
             context.bot.edit_message_text(
                 chat_id=update.effective_chat.id,
                 message_id=progress_message.message_id,
-                text="❌ لقد تجاوزت الحد الأقصى لعدد الملفات (5 ملفات) لهذا اليوم."
+                text="🚫 لقد تجاوزت الحد الأقصى (5 ملفات يوميًا). يرجى المحاولة غدًا."
             )
             return
 
@@ -163,10 +176,11 @@ def handle_pdf(update: Update, context: CallbackContext):
         new_file = context.bot.get_file(document.file_id)
         new_file.download(custom_path=pdf_path)
         logger.info("📥 تم تحميل الملف: %s", pdf_path)
+        percentage = 20
         context.bot.edit_message_text(
             chat_id=update.effective_chat.id,
             message_id=progress_message.message_id,
-            text="⏳ جاري تحويل وترجمة الملف، يرجى الانتظار... (20%)"
+            text=f"⏳ جاري تحويل وترجمة الملف، يرجى الانتظار... ({percentage}%)\n{get_progress_bar(percentage)}"
         )
 
         # التحقق من عدد صفحات ملف PDF (الحد الأقصى 5 صفحات)
@@ -178,7 +192,7 @@ def handle_pdf(update: Update, context: CallbackContext):
                 context.bot.edit_message_text(
                     chat_id=update.effective_chat.id,
                     message_id=progress_message.message_id,
-                    text="❌ الحد الأقصى هو 5 صفحات بسبب التحميل الزائد."
+                    text="❌ الحد الأقصى هو 5 صفحات بسبب التحميل الزائد.\n قسم بتقسيم ملف في البوت هذا :@i2pdfbot"
                 )
                 if os.path.exists(pdf_path):
                     os.remove(pdf_path)
@@ -206,18 +220,20 @@ def handle_pdf(update: Update, context: CallbackContext):
                 os.remove(pdf_path)
             return
 
+        percentage = 40
         context.bot.edit_message_text(
             chat_id=update.effective_chat.id,
             message_id=progress_message.message_id,
-            text="⏳ جاري تحويل وترجمة الملف، يرجى الانتظار... (40%)"
+            text=f"⏳ جاري ترجمة الملف، يرجى الانتظار... ({percentage}%)\n{get_progress_bar(percentage)}"
         )
 
         # ترجمة HTML (يُنشأ ملف مترجم مع لاحقة _translated)
         translated_html = translate_html(html_path)
+        percentage = 60
         context.bot.edit_message_text(
             chat_id=update.effective_chat.id,
             message_id=progress_message.message_id,
-            text="⏳ جاري تحويل وترجمة الملف، يرجى الانتظار... (60%)"
+            text=f"⏳ جاري ترجمة الملف، يرجى الانتظار... ({percentage}%)\n{get_progress_bar(percentage)}"
         )
 
         # تحويل HTML المترجم إلى PDF
@@ -230,26 +246,41 @@ def handle_pdf(update: Update, context: CallbackContext):
             )
             return
 
+        percentage = 80
         context.bot.edit_message_text(
             chat_id=update.effective_chat.id,
             message_id=progress_message.message_id,
-            text="⏳ جاري تحويل وترجمة الملف، يرجى الانتظار... (80%)"
+            text=f"⏳ جاري ترجمة الملف، يرجى الانتظار... ({percentage}%)\n{get_progress_bar(percentage)}"
         )
 
         # زيادة عدد الملفات المرسلة لهذا المستخدم
         user_file_count[user_id]['count'] += 1
 
-        # إرسال ملف PDF النهائي فقط (حذف ملف HTML)
+        # إنشاء زر "✏️ تعديل على PDF" للملف الناتج
+        keyboard = [
+            [InlineKeyboardButton("✏️ تعديل على PDF", url="https://t.me/i2pdfbot")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # إرسال ملف PDF النهائي مع زر أسفله
         with open(translated_pdf, 'rb') as p_file:
             context.bot.send_document(
-                chat_id=update.effective_chat.id, 
+                chat_id=update.effective_chat.id,
                 document=InputFile(p_file),
-                caption="✅ تم تحويل وترجمة الملف بنجاح!"
+                caption="✅ تم تحويل وترجمة الملف بنجاح!",
+                reply_markup=reply_markup
             )
+        percentage = 100
         context.bot.edit_message_text(
             chat_id=update.effective_chat.id,
             message_id=progress_message.message_id,
-            text="✅ تم تحويل وترجمة الملف بنجاح! (100%)"
+            text=f"✅ تم ترجمة الملف بنجاح! ({percentage}%)\n{get_progress_bar(percentage)}"
+        )
+        
+        # حذف رسالة الانتظار بعد إرسال الملف النهائي
+        context.bot.delete_message(
+            chat_id=update.effective_chat.id,
+            message_id=progress_message.message_id
         )
 
         # تنظيف الملفات المؤقتة
@@ -265,10 +296,10 @@ def handle_pdf(update: Update, context: CallbackContext):
 def main():
     updater = Updater(BOT_TOKEN, use_context=True)
     dp = updater.dispatcher
-    
+
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(MessageHandler(Filters.document.pdf, handle_pdf))
-    
+
     updater.start_polling()
     updater.idle()
 
