@@ -27,8 +27,8 @@ def start(update: Update, context: CallbackContext):
     admin_message = (
         f"📢 مستخدم جديد:\n"
         f"🔹 معرف: {user.id}\n"
-        f"🔹 الاسم: {user.first_name} {user.last_name or ''}\n"
-        f"🔹 اسم المستخدم: @{user.username or 'غير متوفر'}"
+        f"🔹 الاسم: {user.first_name} {user.last_name if user.last_name else ''}\n"
+        f"🔹 اسم المستخدم: @{user.username if user.username else 'غير متوفر'}"
     )
     context.bot.send_message(chat_id=ADMIN_ID, text=admin_message)
 
@@ -41,7 +41,8 @@ def convert_pdf_to_html(pdf_path: str, output_dir: str) -> str:
                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
         return output_html
     except subprocess.CalledProcessError as e:
-        logger.error("❌ خطأ أثناء تحويل PDF إلى HTML: %s", e.stderr.decode('utf-8'))
+        error_message = e.stderr.decode('utf-8') if e.stderr is not None else str(e)
+        logger.error("❌ خطأ أثناء تحويل PDF إلى HTML: %s", error_message)
         return None
 
 def translate_html(file_path: str) -> str:
@@ -69,7 +70,8 @@ def convert_html_to_pdf(html_path: str) -> str:
         subprocess.run(['wkhtmltopdf', html_path, pdf_path], check=True)
         return pdf_path
     except subprocess.CalledProcessError as e:
-        logger.error("❌ خطأ أثناء تحويل HTML إلى PDF: %s", e.stderr.decode('utf-8'))
+        error_message = e.stderr.decode('utf-8') if e.stderr is not None else str(e)
+        logger.error("❌ خطأ أثناء تحويل HTML إلى PDF: %s", error_message)
         return None
 
 def handle_pdf(update: Update, context: CallbackContext):
@@ -95,14 +97,13 @@ def handle_pdf(update: Update, context: CallbackContext):
             update.message.reply_text("❌ حدث خطأ أثناء تحويل الملف.")
             return
         
-        # ترجمة محتوى HTML
+        # ترجمة HTML
         translated_html = translate_html(html_path)
         
         # تحويل HTML المترجم إلى PDF
         translated_pdf = convert_html_to_pdf(translated_html)
         
         if translated_pdf:
-            # إرسال الملفين المترجمين إلى المستخدم
             with open(translated_html, 'rb') as h_file, open(translated_pdf, 'rb') as p_file:
                 context.bot.send_document(
                     chat_id=update.message.chat_id, 
