@@ -2,7 +2,7 @@ import os
 import subprocess
 import logging
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackContext, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackContext, filters
 from bs4 import BeautifulSoup
 from googletrans import Translator
 
@@ -71,7 +71,6 @@ def translate_html(file_path: str) -> str:
     translated_html_path = file_path.replace('.html', '_translated.html')
     with open(translated_html_path, 'w', encoding='utf-8') as f:
         f.write(str(soup))
-
     return translated_html_path
 
 def convert_html_to_pdf(html_path: str) -> str:
@@ -89,9 +88,7 @@ async def handle_pdf(update: Update, context: CallbackContext):
     document = update.message.document
     if document and document.file_name.lower().endswith('.pdf'):
         if document.file_size > 2 * 1024 * 1024:
-            await update.message.reply_text(
-                "❌ حجم الملف أكبر من 2MB. يرجى إرسال ملف PDF أصغر."
-            )
+            await update.message.reply_text("❌ حجم الملف أكبر من 2MB. يرجى إرسال ملف PDF أصغر.")
             return
 
         await update.message.reply_text("⏳ جاري تحويل وترجمة الملف، يرجى الانتظار...")
@@ -126,7 +123,6 @@ async def handle_pdf(update: Update, context: CallbackContext):
                         document=pdf_file,
                         caption="✅ ملف PDF المترجم"
                     )
-
                 await update.message.reply_text("✅ تم تحويل وترجمة الملف بنجاح!")
             else:
                 await update.message.reply_text("❌ حدث خطأ أثناء تحويل HTML إلى PDF.")
@@ -144,7 +140,7 @@ async def handle_pdf(update: Update, context: CallbackContext):
 
 def main():
     """إعداد وتشغيل البوت."""
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.Document.PDF, handle_pdf))
