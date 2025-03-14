@@ -102,7 +102,7 @@ async def handle_pdf(update: Update, context: CallbackContext):
     else:
         await update.message.reply_text("❌ يرجى إرسال ملف PDF فقط.")
 
-def main():
+async def main():
     token = os.getenv("BOT_TOKEN")
 
     app = Application.builder().token(token).build()
@@ -110,7 +110,8 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.Document.PDF, handle_pdf))
 
-    app.run_polling()
+    await app.run_polling()
 
 if __name__ == '__main__':
-    main()
+    import asyncio
+    asyncio.run(main())
