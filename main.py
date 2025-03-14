@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 # إنشاء مثيل للمترجم
 translator = Translator()
 
-# جلب متغيرات البيئة (يمكن تعديلها مباشرة هنا)
+# جلب متغيرات البيئة (تأكد من تعديل BOT_TOKEN إلى توكن البوت الخاص بك)
 ADMIN_ID = os.getenv("ADMIN_ID", "5198110160")
-BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")  # استبدل YOUR_BOT_TOKEN_HERE بتوكن البوت الخاص بك
+BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
 
 def start(update: Update, context: CallbackContext):
     """رسالة الترحيب عند بدء البوت."""
@@ -64,10 +64,11 @@ def translate_html(file_path: str) -> str:
     return translated_path
 
 def convert_html_to_pdf(html_path: str) -> str:
-    """تحويل ملف HTML إلى PDF باستخدام wkhtmltopdf."""
+    """تحويل ملف HTML إلى PDF باستخدام wkhtmltopdf مع تمكين الوصول للملفات المحلية."""
     pdf_path = html_path.replace('.html', '.pdf')
     try:
-        subprocess.run(['wkhtmltopdf', html_path, pdf_path], check=True)
+        # إضافة الخيار --enable-local-file-access للسماح للوصول للملفات المحلية
+        subprocess.run(['wkhtmltopdf', '--enable-local-file-access', html_path, pdf_path], check=True)
         return pdf_path
     except subprocess.CalledProcessError as e:
         error_message = e.stderr.decode('utf-8') if e.stderr is not None else str(e)
