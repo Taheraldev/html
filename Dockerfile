@@ -1,25 +1,19 @@
-# استخدام صورة بايثون الأساسية
-FROM python:3.9-slim
+# استخدم صورة Python الرسمية
+FROM python:3.10-slim
 
-# تعيين متغير البيئة لتجنب التفاعلات أثناء التثبيت
-ENV DEBIAN_FRONTEND=noninteractive
-
-# تثبيت الأدوات والتبعيات المطلوبة
+# تثبيت الأدوات المطلوبة، بما في ذلك pdftohtml
 RUN apt-get update && apt-get install -y \
     poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# تحديد مجلد العمل داخل الحاوية
+# تحديد مجلد العمل
 WORKDIR /app
 
-# نسخ ملفات المشروع
-COPY requirements.txt .
+# نسخ الملفات إلى الحاوية
+COPY . /app
 
-# تثبيت المكتبات المطلوبة لبايثون
+# تثبيت المتطلبات
 RUN pip install --no-cache-dir -r requirements.txt
 
-# نسخ باقي ملفات المشروع
-COPY . .
-
-# تشغيل البوت عند بدء الحاوية
+# تشغيل البوت
 CMD ["python", "main.py"]
