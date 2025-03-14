@@ -267,14 +267,14 @@ def handle_pdf(update: Update, context: CallbackContext):
             context.bot.send_document(
                 chat_id=update.effective_chat.id,
                 document=InputFile(p_file),
-                caption="✅ تم ترجمة الملف بنجاح!",
+                caption="✅ تم ترجمة الملف بنجاح!\n اذا لم يعجيك تصميم استعمل البوت الثاني:@i2pdf2tbot",
                 reply_markup=reply_markup
             )
         percentage = 100
         context.bot.edit_message_text(
             chat_id=update.effective_chat.id,
             message_id=progress_message.message_id,
-            text=f"✅ تم ترجمة الملف بنجاح! ({percentage}%)\n{get_progress_bar(percentage)}"
+            text=f"✅ تم ترجمة الملف بنجاح!\n اذا لم يعجيك تصميم استعمل البوت الثاني:@i2pdf2tbot ({percentage}%)\n{get_progress_bar(percentage)}"
         )
         
         # حذف رسالة الانتظار بعد إرسال الملف النهائي
