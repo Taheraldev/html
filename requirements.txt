@@ -1,3 +1,4 @@
-python-telegram-bot>=23.0.1
-beautifulsoup4
+python-telegram-bot==20.6
+beautifulsoup4==4.12.3
 googletrans==4.0.0-rc1
+pdf2image==1.17.0
