@@ -3,21 +3,33 @@ import subprocess
 import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackContext, filters
+from bs4 import BeautifulSoup
+from googletrans import Translator
 
 # إعداد تسجيل الأخطاء
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# إنشاء مثيل للمترجم
+translator = Translator()
+
+# معرف المشرف لاستقبال إشعارات عند دخول مستخدم جديد
+ADMIN_ID = os.getenv("ADMIN_ID", "5198110160")
+
 async def start(update: Update, context: CallbackContext):
-    await update.message.reply_text("مرحباً! أرسل لي ملف PDF وسأقوم بتحويله إلى HTML.")
+    user = update.message.from_user
+    await update.message.reply_text("مرحباً! أرسل لي ملف PDF وسأقوم بتحويله إلى HTML مترجم.")
+    
+    # إرسال إشعار للمشرف عند دخول المستخدم
+    admin_message = f"📢 دخل المستخدم:\nمعرف المستخدم: {user.id}\nالاسم: {user.first_name} {user.last_name if user.last_name else ''}\nاسم المستخدم: @{user.username if user.username else 'غير متوفر'}"
+    await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message)
 
 def convert_pdf_to_html(pdf_path: str, output_dir: str) -> str:
     """
     تحويل PDF إلى HTML باستخدام `pdftohtml` من poppler-utils.
-    يتم حفظ المخرجات في مجلد معين لتجنب الفوضى.
     """
     try:
-        os.makedirs(output_dir, exist_ok=True)  # إنشاء مجلد الإخراج إذا لم يكن موجودًا
+        os.makedirs(output_dir, exist_ok=True)
         output_html_path = os.path.join(output_dir, os.path.basename(pdf_path).replace('.pdf', '.html'))
         
         # تشغيل pdftohtml مع تحسين التخطيط وإزالة الإطارات
@@ -29,6 +41,29 @@ def convert_pdf_to_html(pdf_path: str, output_dir: str) -> str:
         logger.error("❌ خطأ أثناء تحويل PDF إلى HTML: %s", e.stderr.decode('utf-8'))
         return None
 
+def translate_html(file_path: str) -> str:
+    """
+    ترجمة محتوى HTML من الإنجليزية إلى العربية.
+    """
+    with open(file_path, 'r', encoding='utf-8') as f:
+        html = f.read()
+    soup = BeautifulSoup(html, 'html.parser')
+    
+    for element in soup.find_all(text=True):
+        original_text = element.strip()
+        if original_text:
+            try:
+                translated_text = translator.translate(original_text, src='en', dest='ar').text
+                element.replace_with(translated_text)
+            except Exception as e:
+                logger.error(f"❌ خطأ أثناء الترجمة: {e}")
+    
+    translated_html_path = file_path.replace('.html', '_translated.html')
+    with open(translated_html_path, 'w', encoding='utf-8') as f:
+        f.write(str(soup))
+    
+    return translated_html_path
+
 async def handle_pdf(update: Update, context: CallbackContext):
     document = update.message.document
     if document and document.file_name.lower().endswith('.pdf'):
@@ -36,7 +71,7 @@ async def handle_pdf(update: Update, context: CallbackContext):
             await update.message.reply_text("❌ حجم الملف أكبر من 2MB. يرجى إرسال ملف PDF أصغر.")
             return
         
-        await update.message.reply_text("⏳ جاري تحويل ملف PDF إلى HTML، انتظر بعض الدقائق...")
+        await update.message.reply_text("⏳ جاري تحويل ملف PDF إلى HTML وترجمته، انتظر بعض الدقائق...")
 
         pdf_path = document.file_name
         output_dir = "converted_files"
@@ -48,30 +83,33 @@ async def handle_pdf(update: Update, context: CallbackContext):
         # تحويل PDF إلى HTML
         html_path = convert_pdf_to_html(pdf_path, output_dir)
         if html_path:
-            with open(html_path, 'rb') as f:
-                await context.bot.send_document(chat_id=update.message.chat_id, document=f)
-            await update.message.reply_text("✅ تم تحويل الملف إلى HTML بنجاح!")
+            # ترجمة HTML
+            translated_html_path = translate_html(html_path)
+            with open(translated_html_path, 'rb') as f:
+                await context.bot.send_document(
+                    chat_id=update.message.chat_id,
+                    document=f,
+                    caption="✅ تم تحويل وترجمة الملف بنجاح!\nقم بإعادة توجيه هذا الملف للبوت الرئيسي لتحويله إلى PDF: @i2pdfbot \n@ta_ja199 للاستفسار"
+                )
+            await update.message.reply_text("✅ تم تحويل الملف إلى HTML مترجم بنجاح!")
         else:
             await update.message.reply_text("❌ حدث خطأ أثناء تحويل الملف.")
         
         # تنظيف الملفات المؤقتة
         os.remove(pdf_path)
-        if html_path and os.path.exists(html_path):
-            os.remove(html_path)
+        os.remove(html_path)
+        os.remove(translated_html_path)
     else:
         await update.message.reply_text("❌ يرجى إرسال ملف PDF فقط.")
 
 def main():
     token = os.getenv("BOT_TOKEN")
 
-    # إنشاء التطبيق باستخدام `Application.builder()`
     app = Application.builder().token(token).build()
 
-    # إضافة المعالجات
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.Document.PDF, handle_pdf))
 
-    # تشغيل البوت
     app.run_polling()
 
 if __name__ == '__main__':
