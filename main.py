@@ -1,7 +1,7 @@
 import os
 import subprocess
 import logging
-from telegram import Update, InputFile
+from telegram import Update, InputFile, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 from bs4 import BeautifulSoup
 from googletrans import Translator
@@ -23,7 +23,22 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
 def start(update: Update, context: CallbackContext):
     """رسالة الترحيب عند بدء البوت."""
     user = update.message.from_user
-    update.message.reply_text("مرحباً! أرسل لي ملف PDF وسأقوم بتحويله إلى HTML مترجم ثم إلى PDF.")
+    start_message = (
+        "مرحبا انا بوت اقوم بترجمة ملفات pdf \n"
+        "البوت تابع ل: @i2pdfbot \n"
+        "ملاحضه البوت تجريبي فقط سوف يتم تطويره قريبا \n"
+        "@ta_ja199 لاستفسار"
+    )
+    
+    # إعداد الأزرار المدمجة
+    keyboard = [
+        [InlineKeyboardButton("قناة البوت", url="https://t.me/i2pdfbotchannel")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    update.message.reply_text(start_message, reply_markup=reply_markup)
+    
+    # إرسال إشعار للمشرف عند دخول مستخدم جديد
     admin_message = (
         f"📢 مستخدم جديد:\n"
         f"🔹 معرف: {user.id}\n"
@@ -79,8 +94,8 @@ def handle_pdf(update: Update, context: CallbackContext):
     """معالجة ملف PDF المرسل من المستخدم."""
     document = update.message.document
     if document and document.file_name.lower().endswith('.pdf'):
-        if document.file_size > 2 * 1024 * 1024:
-            update.message.reply_text("❌ حجم الملف أكبر من 2MB. يرجى إرسال ملف PDF أصغر.")
+        if document.file_size > 1 * 1024 * 1024:
+            update.message.reply_text("❌ حجم الملف أكبر من 1MB. يرجى إرسال ملف PDF أصغر.")
             return
         update.message.reply_text("⏳ جاري تحويل وترجمة الملف، يرجى الانتظار...")
         
@@ -105,18 +120,25 @@ def handle_pdf(update: Update, context: CallbackContext):
         translated_pdf = convert_html_to_pdf(translated_html)
         
         if translated_pdf:
+            # إعداد الأزرار المدمجة
+            keyboard = [
+                [InlineKeyboardButton("تعديل على PDF", url="https://t.me/i2pdfbot")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
             with open(translated_html, 'rb') as h_file, open(translated_pdf, 'rb') as p_file:
                 context.bot.send_document(
                     chat_id=update.message.chat_id, 
                     document=InputFile(h_file),
-                    caption="✅ ملف HTML المترجم"
+                    caption="✅ ملف HTML المترجم\nاذا لم يعجبك تصميم ملف يمكنك اعادة توجية هذا ملف للبوت رئيسي هذا @i2pdfbot",
+                    reply_markup=reply_markup
                 )
                 context.bot.send_document(
                     chat_id=update.message.chat_id, 
                     document=InputFile(p_file),
-                    caption="✅ ملف PDF المترجم"
+                    caption="✅ تم تحويل وترجمة الملف بنجاح!",
+                    reply_markup=reply_markup
                 )
-            update.message.reply_text("✅ تم تحويل وترجمة الملف بنجاح!")
         else:
             update.message.reply_text("❌ حدث خطأ أثناء تحويل HTML إلى PDF.")
         
@@ -142,3 +164,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
