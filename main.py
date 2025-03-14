@@ -1,66 +1,78 @@
-import logging
 import os
 import subprocess
+import logging
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackContext, filters
 
-# إعداد نظام تسجيل الأحداث
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+# إعداد تسجيل الأخطاء
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# دالة بدء المحادثة
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('مرحباً! أرسل لي ملف PDF وسأقوم بتحويله إلى HTML باستخدام pdftohtml.')
+async def start(update: Update, context: CallbackContext):
+    await update.message.reply_text("مرحباً! أرسل لي ملف PDF وسأقوم بتحويله إلى HTML.")
 
-# دالة معالجة الملفات المرسلة
-async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    document = update.message.document
-    if document.mime_type != 'application/pdf':
-        await update.message.reply_text("الملف المرسل ليس بصيغة PDF.")
-        return
-
-    # إنشاء مجلد مؤقت لتحميل الملفات
-    os.makedirs("downloads", exist_ok=True)
-    
-    # تحميل الملف
-    input_file = os.path.join("downloads", document.file_name)
-    file = await document.get_file()
-    await file.download_to_drive(custom_path=input_file)
-    
-    # تحديد اسم ملف الإخراج (يمكن أن يكون pdftohtml ينتج ملفات متعددة، هنا مثال لتوليد ملف HTML رئيسي)
-    output_file = input_file.replace('.pdf', '.html')
-    
+def convert_pdf_to_html(pdf_path: str, output_dir: str) -> str:
+    """
+    تحويل PDF إلى HTML باستخدام `pdftohtml` من poppler-utils.
+    يتم حفظ المخرجات في مجلد معين لتجنب الفوضى.
+    """
     try:
-        # استخدام pdftohtml لتحويل الملف
-        # الخيار -c يحافظ على ألوان النصوص والتخطيط قدر الإمكان
-        subprocess.run(['pdftohtml', '-c', input_file, output_file], check=True)
-        await update.message.reply_text("تم تحويل الملف بنجاح، جاري إرسال ملف HTML.")
-        with open(output_file, 'rb') as html_file:
-            await update.message.reply_document(document=html_file)
+        os.makedirs(output_dir, exist_ok=True)  # إنشاء مجلد الإخراج إذا لم يكن موجودًا
+        output_html_path = os.path.join(output_dir, os.path.basename(pdf_path).replace('.pdf', '.html'))
+        
+        # تشغيل pdftohtml مع تحسين التخطيط وإزالة الإطارات
+        subprocess.run(['pdftohtml', '-c', '-noframes', pdf_path, output_html_path],
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+
+        return output_html_path
     except subprocess.CalledProcessError as e:
-        logger.error("خطأ أثناء التحويل: %s", e)
-        await update.message.reply_text("حدث خطأ أثناء تحويل الملف. تأكد من تثبيت أداة pdftohtml بشكل صحيح.")
-    finally:
-        # حذف الملفات المؤقتة
-        if os.path.exists(input_file):
-            os.remove(input_file)
-        if os.path.exists(output_file):
-            os.remove(output_file)
+        logger.error("❌ خطأ أثناء تحويل PDF إلى HTML: %s", e.stderr.decode('utf-8'))
+        return None
+
+async def handle_pdf(update: Update, context: CallbackContext):
+    document = update.message.document
+    if document and document.file_name.lower().endswith('.pdf'):
+        if document.file_size > 2 * 1024 * 1024:
+            await update.message.reply_text("❌ حجم الملف أكبر من 2MB. يرجى إرسال ملف PDF أصغر.")
+            return
+        
+        await update.message.reply_text("⏳ جاري تحويل ملف PDF إلى HTML، انتظر بعض الدقائق...")
+
+        pdf_path = document.file_name
+        output_dir = "converted_files"
+
+        new_file = await context.bot.get_file(document.file_id)
+        await new_file.download_to_drive(pdf_path)
+        logger.info("📥 تم تحميل الملف: %s", pdf_path)
+
+        # تحويل PDF إلى HTML
+        html_path = convert_pdf_to_html(pdf_path, output_dir)
+        if html_path:
+            with open(html_path, 'rb') as f:
+                await context.bot.send_document(chat_id=update.message.chat_id, document=f)
+            await update.message.reply_text("✅ تم تحويل الملف إلى HTML بنجاح!")
+        else:
+            await update.message.reply_text("❌ حدث خطأ أثناء تحويل الملف.")
+        
+        # تنظيف الملفات المؤقتة
+        os.remove(pdf_path)
+        if html_path and os.path.exists(html_path):
+            os.remove(html_path)
+    else:
+        await update.message.reply_text("❌ يرجى إرسال ملف PDF فقط.")
 
 def main():
-    # ضع توكن بوت تلجرام الخاص بك هنا
-    token = '5264968049:AAHUniq68Nqq39CrFf8lVqerwetirQnGxzc'
-    application = Application.builder().token(token).build()
-    
-    # تسجيل المعالجات
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.Document.PDF, handle_document))
-    
-    # بدء البوت
-    application.run_polling()
+    token = os.getenv("BOT_TOKEN")
+
+    # إنشاء التطبيق باستخدام `Application.builder()`
+    app = Application.builder().token(token).build()
+
+    # إضافة المعالجات
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.Document.PDF, handle_pdf))
+
+    # تشغيل البوت
+    app.run_polling()
 
 if __name__ == '__main__':
     main()
